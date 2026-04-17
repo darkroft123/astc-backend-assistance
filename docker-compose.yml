@@ -1,0 +1,98 @@
+version: "3.9"
+
+services:
+  assistance-service:
+    build: .
+    container_name: astc-cn-backend-assistance-service
+    ports:
+      - "8082:8082"
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - astc-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: astc-cn-backend-assistance-db
+    environment:
+      POSTGRES_DB: assistance_db
+      POSTGRES_USER: assistance_user
+      POSTGRES_PASSWORD: assistance_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U assistance_user -d assistance_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - astc-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: astc-cn-backend-assistance-redis
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - astc-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: astc-cn-backend-assistance-rabbitmq
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    networks:
+      - astc-network
+
+  minio:
+    image: minio/minio:latest
+    container_name: astc-cn-backend-assistance-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - astc-network
+
+volumes:
+  pgdata:
+  miniodata:
+
+networks:
+  astc-network:
+    driver: bridge
