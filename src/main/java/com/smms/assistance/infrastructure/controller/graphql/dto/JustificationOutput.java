@@ -6,7 +6,11 @@ import lombok.*;
 import java.util.UUID;
 
 @Key(fields = @FieldSet("id"))
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class JustificationOutput {
     private UUID id;
     private UUID absenceId;
@@ -16,6 +20,4 @@ public class JustificationOutput {
     private String status;
     private String comment;
     private String submittedAt;
-    private String reviewedAt;
-    private UUID reviewedBy;
 }

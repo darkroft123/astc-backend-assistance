@@ -1,131 +1,99 @@
 package com.smms.assistance.infrastructure.controller.graphql;
 
-import com.smms.assistance.application.in.*;
-import com.smms.assistance.domain.model.*;
-import com.smms.assistance.infrastructure.controller.graphql.dto.*;
+import com.smms.assistance.application.in.GetDashboardPort;
+import com.smms.assistance.application.in.GetJustificationStatusPort;
+import com.smms.assistance.application.in.ListAbsencesPort;
+import com.smms.assistance.application.in.ListAttendancePort;
+import com.smms.assistance.application.in.ListJustificationsPort;
+import com.smms.assistance.infrastructure.controller.graphql.dto.AbsencePageOutput;
+import com.smms.assistance.infrastructure.controller.graphql.dto.AttendancePageOutput;
+import com.smms.assistance.infrastructure.controller.graphql.dto.DashboardOutput;
+import com.smms.assistance.infrastructure.controller.graphql.dto.DtoMapper;
+import com.smms.assistance.infrastructure.controller.graphql.dto.JustificationPageOutput;
+import com.smms.assistance.infrastructure.controller.graphql.dto.JustificationStatusOutput;
 import com.smms.assistance.infrastructure.security.AuthContext;
 import jakarta.inject.Inject;
-import org.eclipse.microprofile.graphql.*;
+import org.eclipse.microprofile.graphql.GraphQLApi;
+import org.eclipse.microprofile.graphql.Name;
+import org.eclipse.microprofile.graphql.Query;
+
 import java.time.LocalDate;
 import java.util.UUID;
 
 @GraphQLApi
 public class AssistanceQueryResolver {
 
-    private static final UUID TEST_USER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
+    @Inject
+    AuthContext authContext;
+    @Inject
+    GetDashboardPort getDashboardPort;
+    @Inject
+    ListAttendancePort listAttendancePort;
+    @Inject
+    ListAbsencesPort listAbsencesPort;
+    @Inject
+    ListJustificationsPort listJustificationsPort;
+    @Inject
+    GetJustificationStatusPort getJustificationStatusPort;
 
-    @Inject AuthContext authContext;
-    @Inject GetDashboardPort getDashboardPort;
-    @Inject ListAttendancePort listAttendancePort;
-    @Inject ListAbsencesPort listAbsencesPort;
-    @Inject ListJustificationsPort listJustificationsPort;
-    @Inject GetJustificationStatusPort getJustificationStatusPort;
-
-   @Query("getDashboard")
-    public DashboardOutput getDashboard() {
-        try {
-            UUID userId = TEST_USER_ID;
-            System.out.println("getDashboard USER => " + userId);
-            System.out.println("ANTES DE EXECUTE getDashboard");
-
-            DashboardSummary summary = getDashboardPort.execute(userId);
-
-            System.out.println("DESPUES DE EXECUTE getDashboard => " + summary);
-
-            DashboardOutput output = DtoMapper.toDashboardOutput(summary);
-
-            System.out.println("DESPUES DE MAPPER getDashboard => " + output);
-
-            return output;
-        } catch (Exception e) {
-            System.out.println("ERROR EN getDashboard => " + e.getClass().getName() + ": " + e.getMessage());
-            e.printStackTrace();
-            throw e;
-        }
-    }
-    @Query("listAttendance")
-    //@RolesAllowed("TEAM_MEMBER")
-    public AttendancePageOutput listAttendance(@Name("filter") AttendanceFilterInput filter) {
-
-        UUID userId = TEST_USER_ID;
-        System.out.println("listAttendance USER => " + userId);
-
-        AttendanceStatus status = filter != null && filter.getStatus() != null
-                ? AttendanceStatus.valueOf(filter.getStatus()) : null;
-
-        LocalDate from = filter != null && filter.getFrom() != null
-                ? LocalDate.parse(filter.getFrom()) : null;
-
-        LocalDate to = filter != null && filter.getTo() != null
-                ? LocalDate.parse(filter.getTo()) : null;
-
-        String search = filter != null ? filter.getSearch() : null;
-        int page = filter != null ? filter.getPage() : 0;
-        int size = filter != null && filter.getSize() > 0 ? filter.getSize() : 20;
-
-        System.out.println("FILTER => " + filter);
-
-        Page<com.smms.assistance.domain.entity.AttendanceEntity> result =
-                listAttendancePort.execute(userId, from, to, status, search, page, size);
-
-        System.out.println("RESULT SIZE => " + result.getItems().size());
-
-        return DtoMapper.toAttendancePage(result);
+    @Query("GetDashboard")
+    public DashboardOutput getDashboard(
+            @Name("fromDate") String fromDate,
+            @Name("toDate") String toDate) {
+        authContext.assertTeamMember();
+        UUID userId = authContext.getUserId();
+        LocalDate from = fromDate != null ? LocalDate.parse(fromDate) : null;
+        LocalDate to = toDate != null ? LocalDate.parse(toDate) : null;
+        return DtoMapper.toDashboardOutput(getDashboardPort.execute(userId, from, to));
     }
 
-    @Query("listAbsences")
-    //@RolesAllowed("TEAM_MEMBER")
-    public java.util.List<AbsenceOutput> listAbsences() {
-
-        UUID userId = TEST_USER_ID;
-        System.out.println("listAbsences USER => " + userId);
-
-        var result = listAbsencesPort.execute(userId);
-
-        System.out.println("ABSENCES SIZE => " + result.size());
-        System.out.println("ABSENCES RAW => " + result);
-
-        return result.stream().map(a -> {
-            System.out.println("MAPPING ABSENCE => " + a);
-            return DtoMapper.toAbsenceOutput(a);
-        }).toList();
+    @Query("ListAttendance")
+    public AttendancePageOutput listAttendance(
+            @Name("page") int page,
+            @Name("size") int size,
+            @Name("projectId") UUID projectId,
+            @Name("fromDate") String fromDate,
+            @Name("toDate") String toDate,
+            @Name("status") String status) {
+        authContext.assertTeamMember();
+        UUID userId = authContext.getUserId();
+        return DtoMapper.toAttendancePage(
+                listAttendancePort.execute(userId, page, size, projectId, fromDate, toDate, status));
     }
 
-    @Query("listJustifications")
-    //@RolesAllowed("TEAM_MEMBER")
-    public JustificationPageOutput listJustifications(@Name("filter") JustificationFilterInput filter) {
-
-        UUID userId = TEST_USER_ID;
-        System.out.println("listJustifications USER => " + userId);
-
-        JustificationStatus status = filter != null && filter.getStatus() != null
-                ? JustificationStatus.valueOf(filter.getStatus()) : null;
-
-        LocalDate from = filter != null && filter.getFrom() != null
-                ? LocalDate.parse(filter.getFrom()) : null;
-
-        LocalDate to = filter != null && filter.getTo() != null
-                ? LocalDate.parse(filter.getTo()) : null;
-
-        int page = filter != null ? filter.getPage() : 0;
-        int size = filter != null && filter.getSize() > 0 ? filter.getSize() : 20;
-
-        Page<com.smms.assistance.domain.entity.JustificationEntity> result =
-                listJustificationsPort.execute(userId, status, from, to, page, size);
-
-        System.out.println("JUSTIFICATIONS SIZE => " + result.getItems().size());
-
-        return DtoMapper.toJustificationPage(result);
+    @Query("ListAbsences")
+    public AbsencePageOutput listAbsences(
+            @Name("page") int page,
+            @Name("size") int size,
+            @Name("projectId") UUID projectId,
+            @Name("fromDate") String fromDate,
+            @Name("toDate") String toDate,
+            @Name("type") String type,
+            @Name("justified") Boolean justified) {
+        authContext.assertTeamMember();
+        UUID userId = authContext.getUserId();
+        return DtoMapper.toAbsencePage(
+                listAbsencesPort.execute(userId, page, size, projectId, fromDate, toDate, type, justified));
     }
 
-    @Query("getJustificationStatus")
-    //@RolesAllowed("TEAM_MEMBER")
-    public JustificationStatusOutput getJustificationStatus(@Name("justificationId") UUID justificationId) {
+    @Query("ListJustifications")
+    public JustificationPageOutput listJustifications(
+            @Name("page") int page,
+            @Name("size") int size,
+            @Name("status") String status,
+            @Name("fromDate") String fromDate,
+            @Name("toDate") String toDate) {
+        authContext.assertTeamMember();
+        UUID userId = authContext.getUserId();
+        return DtoMapper.toJustificationPage(
+                listJustificationsPort.execute(userId, page, size, status, fromDate, toDate));
+    }
 
-        UUID userId = TEST_USER_ID;
-        System.out.println("getJustificationStatus USER => " + userId);
-        System.out.println("JUSTIFICATION ID => " + justificationId);
-
+    @Query("GetJustificationStatus")
+    public JustificationStatusOutput getJustificationStatus(
+            @Name("justificationId") UUID justificationId) {
+        authContext.assertTeamMember();
+        UUID userId = authContext.getUserId();
         return DtoMapper.toJustificationStatusOutput(
                 getJustificationStatusPort.execute(userId, justificationId));
     }

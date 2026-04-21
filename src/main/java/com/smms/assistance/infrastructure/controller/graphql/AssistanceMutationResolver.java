@@ -1,81 +1,56 @@
 package com.smms.assistance.infrastructure.controller.graphql;
 
-import com.smms.assistance.application.in.*;
-import com.smms.assistance.infrastructure.controller.graphql.dto.*;
+import com.smms.assistance.application.in.JustifyAbsencePort;
+import com.smms.assistance.application.in.RegisterAttendancePort;
+import com.smms.assistance.application.in.SaveJustificationPort;
+import com.smms.assistance.infrastructure.controller.graphql.dto.DtoMapper;
+import com.smms.assistance.infrastructure.controller.graphql.dto.JustifyAbsenceInput;
+import com.smms.assistance.infrastructure.controller.graphql.dto.JustifyAbsenceOutput;
+import com.smms.assistance.infrastructure.controller.graphql.dto.RegisterAttendanceInput;
+import com.smms.assistance.infrastructure.controller.graphql.dto.RegisterAttendanceOutput;
+import com.smms.assistance.infrastructure.controller.graphql.dto.SaveJustificationInput;
+import com.smms.assistance.infrastructure.controller.graphql.dto.SaveJustificationOutput;
 import com.smms.assistance.infrastructure.security.AuthContext;
 import jakarta.inject.Inject;
-import org.eclipse.microprofile.graphql.*;
+import org.eclipse.microprofile.graphql.GraphQLApi;
+import org.eclipse.microprofile.graphql.Mutation;
+import org.eclipse.microprofile.graphql.Name;
+
 import java.util.UUID;
 
 @GraphQLApi
 public class AssistanceMutationResolver {
 
-    private static final UUID TEST_USER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");
+    @Inject
+    AuthContext authContext;
+    @Inject
+    RegisterAttendancePort registerAttendancePort;
+    @Inject
+    JustifyAbsencePort justifyAbsencePort;
+    @Inject
+    SaveJustificationPort saveJustificationPort;
 
-    @Inject AuthContext authContext;
-    @Inject RegisterAttendancePort registerAttendancePort;
-    @Inject JustifyAbsencePort justifyAbsencePort;
-    @Inject SaveJustificationPort saveJustificationPort;
-
-    @Mutation("registerAttendance")
-    //@RolesAllowed("TEAM_MEMBER")
-    public AttendanceOutput registerAttendance(@Name("input") RegisterAttendanceInput input) {
-        try {
-            UUID userId = TEST_USER_ID;
-            System.out.println("registerAttendance USER => " + userId);
-            System.out.println("INPUT DATE => " + input.getDate());
-            System.out.println("INPUT CHECKIN => " + input.getCheckIn());
-            System.out.println("INPUT CHECKOUT => " + input.getCheckOut());
-            System.out.println("INPUT PROJECTID => " + input.getProjectId());
-            System.out.println("INPUT LATITUDE => " + input.getLatitude());
-            System.out.println("INPUT LONGITUDE => " + input.getLongitude());
-            System.out.println("INPUT PHOTO FILENAME => " + input.getPhotoFilename());
-            System.out.println("INPUT PHOTO BASE64 NULL? => " + (input.getPhotoBase64() == null));
-            System.out.println("ANTES DE EXECUTE registerAttendance");
-
-            var result = registerAttendancePort.execute(userId, input);
-
-            System.out.println("DESPUES DE EXECUTE registerAttendance => " + result);
-
-            return DtoMapper.toAttendanceOutput(result);
-        } catch (Exception e) {
-            System.out.println("ERROR EN registerAttendance => " + e.getClass().getName() + ": " + e.getMessage());
-            e.printStackTrace();
-            throw e;
-        }
+    @Mutation("RegisterAttendance")
+    public RegisterAttendanceOutput registerAttendance(@Name("input") RegisterAttendanceInput input) {
+        authContext.assertTeamMember();
+        UUID userId = authContext.getUserId();
+        return DtoMapper.toRegisterAttendanceOutput(
+                registerAttendancePort.execute(userId, input));
     }
 
-    @Mutation("justifyAbsence")
-    //@RolesAllowed("TEAM_MEMBER")
-    public AbsenceOutput justifyAbsence(@Name("input") JustifyAbsenceInput input) {
-        try {
-            UUID userId = TEST_USER_ID;
-            System.out.println("justifyAbsence USER => " + userId);
-            System.out.println("INPUT => " + input);
-
-            return DtoMapper.toAbsenceOutput(
-                    justifyAbsencePort.execute(userId, input.getAbsenceId()));
-        } catch (Exception e) {
-            System.out.println("ERROR EN justifyAbsence => " + e.getClass().getName() + ": " + e.getMessage());
-            e.printStackTrace();
-            throw e;
-        }
+    @Mutation("JustifyAbsence")
+    public JustifyAbsenceOutput justifyAbsence(@Name("input") JustifyAbsenceInput input) {
+        authContext.assertTeamMember();
+        UUID userId = authContext.getUserId();
+        var absence = justifyAbsencePort.execute(userId, input.getAbsenceId());
+        return new JustifyAbsenceOutput(absence.getId(), true);
     }
 
-    @Mutation("saveJustification")
-    //@RolesAllowed("TEAM_MEMBER")
-    public JustificationOutput saveJustification(@Name("input") SaveJustificationInput input) {
-        try {
-            UUID userId = TEST_USER_ID;
-            System.out.println("saveJustification USER => " + userId);
-            System.out.println("INPUT => " + input);
-
-            return DtoMapper.toJustificationOutput(
-                    saveJustificationPort.execute(userId, input));
-        } catch (Exception e) {
-            System.out.println("ERROR EN saveJustification => " + e.getClass().getName() + ": " + e.getMessage());
-            e.printStackTrace();
-            throw e;
-        }
+    @Mutation("SaveJustification")
+    public SaveJustificationOutput saveJustification(@Name("input") SaveJustificationInput input) {
+        authContext.assertTeamMember();
+        UUID userId = authContext.getUserId();
+        return DtoMapper.toSaveJustificationOutput(
+                saveJustificationPort.execute(userId, input));
     }
 }

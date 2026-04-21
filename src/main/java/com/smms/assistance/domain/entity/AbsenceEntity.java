@@ -1,6 +1,5 @@
 package com.smms.assistance.domain.entity;
 
-import com.smms.assistance.domain.model.AbsenceType;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDate;
@@ -9,7 +8,11 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "absences")
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class AbsenceEntity {
 
     @Id
@@ -24,9 +27,8 @@ public class AbsenceEntity {
     @Column(nullable = false)
     private LocalDate date;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
-    private AbsenceType type;
+    private String type;
 
     @Column(nullable = false)
     private Boolean justified = false;

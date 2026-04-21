@@ -4,6 +4,7 @@ import io.smallrye.graphql.api.federation.FieldSet;
 import io.smallrye.graphql.api.federation.Key;
 import lombok.*;
 import java.util.UUID;
+
 @Key(fields = @FieldSet("id"))
 @Getter
 @Setter
@@ -21,5 +22,4 @@ public class AttendanceOutput {
     private Double latitude;
     private Double longitude;
     private String photoUrl;
-    private String createdAt;
 }

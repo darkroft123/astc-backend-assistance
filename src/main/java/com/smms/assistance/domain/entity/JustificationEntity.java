@@ -1,6 +1,5 @@
 package com.smms.assistance.domain.entity;
 
-import com.smms.assistance.domain.model.JustificationStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
@@ -8,7 +7,11 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "justifications")
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class JustificationEntity {
 
     @Id
@@ -25,9 +28,8 @@ public class JustificationEntity {
     @Column(name = "document_url", length = 500)
     private String documentUrl;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
-    private JustificationStatus status;
+    private String status;
 
     private String comment;
 

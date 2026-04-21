@@ -1,9 +1,10 @@
 package com.smms.assistance.application.in;
 
 import com.smms.assistance.domain.entity.AbsenceEntity;
-import java.util.List;
+import com.smms.assistance.domain.model.Page;
+
 import java.util.UUID;
 
 public interface ListAbsencesPort {
-    List<AbsenceEntity> execute(UUID userId);
+    Page<AbsenceEntity> execute(UUID userId, int page, int size, UUID projectId, String fromDate, String toDate, String type, Boolean justified);
 }

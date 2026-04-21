@@ -2,205 +2,198 @@ import { callAssistance } from './client.js';
 
 export const resolvers = {
   Query: {
-    async getDashboard(_, __, contextValue) {
+    async GetDashboard(_, { fromDate, toDate }, contextValue) {
       const data = await callAssistance(
-        `query {
-          getDashboard {
-            recentAttendances {
-              checkIn
-              checkOut
-              createdAt
-              date
-              id
-              latitude
-              longitude
-              photoUrl
-              projectId
-              status
-              userId
-            }
-            recentJustifications {
-              absenceId
-              comment
-              description
-              documentUrl
-              id
-              reviewedAt
-              reviewedBy
-              status
-              submittedAt
-              userId
-            }
-            totalAbsences
+        `query($fromDate: String, $toDate: String) {
+          GetDashboard(fromDate: $fromDate, toDate: $toDate) {
             totalAttendances
-            totalJustifications
+            totalAbsences
+            pendingJustifications
           }
         }`,
-        {},
+        { fromDate, toDate },
         contextValue.token
       );
-      return data.getDashboard;
+      return data.GetDashboard;
     },
 
-    async listAbsences(_, __, contextValue) {
+    async ListAbsences(_, args, contextValue) {
       const data = await callAssistance(
-        `query {
-          listAbsences {
-            date
-            id
-            justified
-            projectId
-            type
-            userId
-          }
-        }`,
-        {},
-        contextValue.token
-      );
-      return data.listAbsences;
-    },
-
-    async listAttendance(_, { filter }, contextValue) {
-      const data = await callAssistance(
-        `query($filter: AttendanceFilterInputInput) {
-          listAttendance(filter: $filter) {
+        `query(
+          $page: Int!,
+          $size: Int!,
+          $projectId: String,
+          $fromDate: String,
+          $toDate: String,
+          $type: String,
+          $justified: Boolean
+        ) {
+          ListAbsences(
+            page: $page,
+            size: $size,
+            projectId: $projectId,
+            fromDate: $fromDate,
+            toDate: $toDate,
+            type: $type,
+            justified: $justified
+          ) {
             items {
+              id
+              userId
+              projectId
+              date
+              type
+              justified
+            }
+            page
+            size
+            total
+          }
+        }`,
+        args,
+        contextValue.token
+      );
+      return data.ListAbsences;
+    },
+
+    async ListAttendance(_, args, contextValue) {
+      const data = await callAssistance(
+        `query(
+          $page: Int!,
+          $size: Int!,
+          $projectId: String,
+          $fromDate: String,
+          $toDate: String,
+          $status: String
+        ) {
+          ListAttendance(
+            page: $page,
+            size: $size,
+            projectId: $projectId,
+            fromDate: $fromDate,
+            toDate: $toDate,
+            status: $status
+          ) {
+            items {
+              id
+              userId
+              projectId
+              date
               checkIn
               checkOut
-              createdAt
-              date
-              id
+              status
               latitude
               longitude
               photoUrl
-              projectId
-              status
-              userId
             }
-            pageInfo {
-              page
-              size
-              totalItems
-              totalPages
-            }
+            page
+            size
+            total
           }
         }`,
-        { filter },
+        args,
         contextValue.token
       );
-      return data.listAttendance;
+      return data.ListAttendance;
     },
 
-    async listJustifications(_, { filter }, contextValue) {
+    async ListJustifications(_, args, contextValue) {
       const data = await callAssistance(
-        `query($filter: JustificationFilterInputInput) {
-          listJustifications(filter: $filter) {
+        `query(
+          $page: Int!,
+          $size: Int!,
+          $status: String,
+          $fromDate: String,
+          $toDate: String
+        ) {
+          ListJustifications(
+            page: $page,
+            size: $size,
+            status: $status,
+            fromDate: $fromDate,
+            toDate: $toDate
+          ) {
             items {
+              id
               absenceId
-              comment
+              userId
               description
               documentUrl
-              id
-              reviewedAt
-              reviewedBy
               status
+              comment
               submittedAt
-              userId
             }
-            pageInfo {
-              page
-              size
-              totalItems
-              totalPages
-            }
+            page
+            size
+            total
           }
         }`,
-        { filter },
+        args,
         contextValue.token
       );
-      return data.listJustifications;
+      return data.ListJustifications;
     },
 
-    async getJustificationStatus(_, { justificationId }, contextValue) {
+    async GetJustificationStatus(_, { justificationId }, contextValue) {
       const data = await callAssistance(
-        `query($justificationId: String) {
-          getJustificationStatus(justificationId: $justificationId) {
-            comment
-            id
-            reviewedAt
-            reviewedBy
+        `query($justificationId: String!) {
+          GetJustificationStatus(justificationId: $justificationId) {
+            justificationId
             status
           }
         }`,
         { justificationId },
         contextValue.token
       );
-      return data.getJustificationStatus;
+      return data.GetJustificationStatus;
     }
   },
 
   Mutation: {
-    async registerAttendance(_, { input }, contextValue) {
+    async RegisterAttendance(_, { input }, contextValue) {
       const data = await callAssistance(
-        `mutation($input: RegisterAttendanceInputInput) {
-          registerAttendance(input: $input) {
-            checkIn
-            checkOut
-            createdAt
-            date
+        `mutation($input: RegisterAttendanceInputInput!) {
+          RegisterAttendance(input: $input) {
             id
-            latitude
-            longitude
-            photoUrl
-            projectId
-            status
             userId
+            date
+            checkIn
+            status
           }
         }`,
         { input },
         contextValue.token
       );
-      return data.registerAttendance;
+      return data.RegisterAttendance;
     },
 
-    async saveJustification(_, { input }, contextValue) {
+    async SaveJustification(_, { input }, contextValue) {
       const data = await callAssistance(
-        `mutation($input: SaveJustificationInputInput) {
-          saveJustification(input: $input) {
-            absenceId
-            comment
-            description
-            documentUrl
+        `mutation($input: SaveJustificationInputInput!) {
+          SaveJustification(input: $input) {
             id
-            reviewedAt
-            reviewedBy
             status
             submittedAt
-            userId
           }
         }`,
         { input },
         contextValue.token
       );
-      return data.saveJustification;
+      return data.SaveJustification;
     },
 
-    async justifyAbsence(_, { input }, contextValue) {
+    async JustifyAbsence(_, { input }, contextValue) {
       const data = await callAssistance(
-        `mutation($input: JustifyAbsenceInputInput) {
-          justifyAbsence(input: $input) {
-            date
-            id
-            justified
-            projectId
-            type
-            userId
+        `mutation($input: JustifyAbsenceInputInput!) {
+          JustifyAbsence(input: $input) {
+            absenceId
+            valid
           }
         }`,
         { input },
         contextValue.token
       );
-      return data.justifyAbsence;
+      return data.JustifyAbsence;
     }
   },
 

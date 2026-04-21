@@ -1,6 +1,5 @@
 package com.smms.assistance.domain.entity;
 
-import com.smms.assistance.domain.model.AttendanceStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDate;
@@ -10,7 +9,11 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "attendances")
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class AttendanceEntity {
 
     @Id
@@ -31,9 +34,8 @@ public class AttendanceEntity {
     @Column(name = "check_out")
     private LocalTime checkOut;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
-    private AttendanceStatus status;
+    private String status;
 
     private Double latitude;
     private Double longitude;

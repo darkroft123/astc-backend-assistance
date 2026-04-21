@@ -3,18 +3,14 @@ package com.smms.assistance.application.usecase;
 import com.smms.assistance.application.in.SaveJustificationPort;
 import com.smms.assistance.domain.entity.AbsenceEntity;
 import com.smms.assistance.domain.entity.JustificationEntity;
-import com.smms.assistance.domain.model.JustificationStatus;
 import com.smms.assistance.infrastructure.controller.graphql.dto.SaveJustificationInput;
 import com.smms.assistance.infrastructure.messaging.OutboxEventPublisher;
 import com.smms.assistance.infrastructure.repository.AbsenceRepository;
 import com.smms.assistance.infrastructure.repository.JustificationRepository;
-import com.smms.assistance.infrastructure.storage.S3StorageAdapter;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import java.io.ByteArrayInputStream;
 import java.time.LocalDateTime;
-import java.util.Base64;
 import java.util.UUID;
 
 @ApplicationScoped
@@ -22,7 +18,6 @@ public class SaveJustificationUseCase implements SaveJustificationPort {
 
     @Inject JustificationRepository justificationRepository;
     @Inject AbsenceRepository absenceRepository;
-    @Inject S3StorageAdapter storageAdapter;
     @Inject OutboxEventPublisher outboxPublisher;
 
     @Override
@@ -40,21 +35,13 @@ public class SaveJustificationUseCase implements SaveJustificationPort {
             throw new IllegalStateException("A justification already exists for absence: " + input.getAbsenceId());
         });
 
-        String documentUrl = null;
-        if (input.getDocumentBase64() != null && !input.getDocumentBase64().isBlank()) {
-            byte[] docBytes = Base64.getDecoder().decode(input.getDocumentBase64());
-            String filename = input.getDocumentFilename() != null ? input.getDocumentFilename() : "document.pdf";
-            documentUrl = storageAdapter.upload("justifications", filename,
-                    new ByteArrayInputStream(docBytes), docBytes.length, "application/octet-stream");
-        }
-
         JustificationEntity entity = JustificationEntity.builder()
                 .id(UUID.randomUUID())
                 .absenceId(input.getAbsenceId())
                 .userId(userId)
                 .description(input.getDescription())
-                .documentUrl(documentUrl)
-                .status(JustificationStatus.PENDING)
+                .documentUrl(input.getDocumentUrl())
+                .status("PENDING")
                 .submittedAt(LocalDateTime.now())
                 .build();
 
@@ -64,7 +51,7 @@ public class SaveJustificationUseCase implements SaveJustificationPort {
         absenceRepository.persist(absence);
 
         outboxPublisher.publish("Justification", entity.getId(),
-                "justification_saved",
+                "SendNotificationByQueue",
                 "{\"justificationId\":\"" + entity.getId() + "\",\"absenceId\":\"" + input.getAbsenceId() + "\",\"userId\":\"" + userId + "\"}");
 
         return entity;

@@ -1,7 +1,6 @@
 package com.smms.assistance.infrastructure.repository;
 
 import com.smms.assistance.domain.entity.JustificationEntity;
-import com.smms.assistance.domain.model.JustificationStatus;
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import io.quarkus.panache.common.Page;
 import io.quarkus.panache.common.Sort;
@@ -12,9 +11,9 @@ import java.util.*;
 @ApplicationScoped
 public class JustificationRepository implements PanacheRepositoryBase<JustificationEntity, UUID> {
 
-    public List<JustificationEntity> findByUser(UUID userId, JustificationStatus status,
-                                                 LocalDate from, LocalDate to,
-                                                 int page, int size) {
+    public List<JustificationEntity> findByUser(UUID userId, String status,
+            LocalDate from, LocalDate to,
+            int page, int size) {
         StringBuilder query = new StringBuilder("userId = :userId");
         Map<String, Object> params = new HashMap<>();
         params.put("userId", userId);
@@ -37,7 +36,7 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
                 .list();
     }
 
-    public long countByUser(UUID userId, JustificationStatus status, LocalDate from, LocalDate to) {
+    public long countByUser(UUID userId, String status, LocalDate from, LocalDate to) {
         StringBuilder query = new StringBuilder("userId = :userId");
         Map<String, Object> params = new HashMap<>();
         params.put("userId", userId);
