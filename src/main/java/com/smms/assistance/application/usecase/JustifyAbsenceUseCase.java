@@ -34,10 +34,10 @@ public class JustifyAbsenceUseCase implements JustifyAbsencePort {
         absence.setJustified(true);
         absenceRepository.persist(absence);
 
-        outboxPublisher.publish("Absence", absenceId,
-                "absence_justified",
-                "{\"absenceId\":\"" + absenceId + "\",\"userId\":\"" + userId + "\"}");
+        // outboxPublisher.publish("Absence", absenceId,
+        //         "absence_justified",
+        //         "{\"absenceId\":\"" + absenceId + "\",\"userId\":\"" + userId + "\"}");
 
         return absence;
-    }
+}
 }
