@@ -16,13 +16,21 @@ public class GetDashboardUseCase implements GetDashboardPort {
 
     @Inject
     AttendanceRepository attendanceRepository;
+
     @Inject
     AbsenceRepository absenceRepository;
+
     @Inject
     JustificationRepository justificationRepository;
 
+    @Inject
+    GenerateAbsenceIfNeededUseCase generateAbsenceIfNeededUseCase;
+
     @Override
     public DashboardSummary execute(UUID userId, LocalDate fromDate, LocalDate toDate) {
+
+        generateAbsenceIfNeededUseCase.execute(userId);
+
         return DashboardSummary.builder()
                 .totalAttendances((int) attendanceRepository.countByUser(
                         userId,

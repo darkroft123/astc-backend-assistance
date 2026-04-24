@@ -51,6 +51,8 @@
         <version>1.2</version>
     </dependency>
 
+    
+
         <!-- Hibernate / JPA -->
         <dependency>
             <groupId>io.quarkus</groupId>
