@@ -1,7 +1,7 @@
 package com.smms.assistance.application.usecase;
 
 import com.smms.assistance.domain.entity.AbsenceEntity;
-import com.smms.assistance.domain.entity.AttendanceEntity;
+//import com.smms.assistance.domain.entity.AttendanceEntity;
 import com.smms.assistance.infrastructure.repository.AbsenceRepository;
 import com.smms.assistance.infrastructure.repository.AttendanceRepository;
 import jakarta.enterprise.context.ApplicationScoped;

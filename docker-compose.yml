@@ -39,35 +39,35 @@ services:
     networks:
       - astc-network
 
-  redis:
-    image: redis:7-alpine
-    container_name: astc-cn-backend-assistance-redis
-    ports:
-      - "6381:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    networks:
-      - astc-network
+ # redis:
+  #  image: redis:7-alpine
+   # container_name: astc-cn-backend-assistance-redis
+    #ports:
+     # - "6381:6379"
+    #healthcheck:
+     # test: ["CMD", "redis-cli", "ping"]
+      #interval: 5s
+      #timeout: 3s
+      #retries: 5
+    #networks:
+     # - astc-network
 
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: astc-cn-backend-assistance-rabbitmq
-    ports:
-      - "5674:5672"
-      - "15674:15672"
-    environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
-    networks:
-      - astc-network
+ # rabbitmq:
+    #image: rabbitmq:3-management-alpine
+    #container_name: astc-cn-backend-assistance-rabbitmq
+    #ports:
+     # - "5674:5672"
+      #- "15674:15672"
+    #environment:
+     # RABBITMQ_DEFAULT_USER: guest
+      #RABBITMQ_DEFAULT_PASS: guest
+    #healthcheck:
+     # test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      #interval: 10s
+      #timeout: 10s
+      #retries: 5
+    #networks:
+     # - astc-network
 
   minio:
     image: minio/minio:latest

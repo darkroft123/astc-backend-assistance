@@ -152,7 +152,7 @@ export const resolvers = {
   Mutation: {
     async RegisterAttendance(_, { input }, contextValue) {
       const data = await callAssistance(
-        `mutation($input: RegisterAttendanceInputInput!) {
+        `mutation($input: RegisterAttendanceInput!) {
           RegisterAttendance(input: $input) {
             id
             userId
@@ -169,7 +169,7 @@ export const resolvers = {
 
     async SaveJustification(_, { input }, contextValue) {
       const data = await callAssistance(
-        `mutation($input: SaveJustificationInputInput!) {
+        `mutation($input: SaveJustificationInput!) {
           SaveJustification(input: $input) {
             id
             status
@@ -184,7 +184,7 @@ export const resolvers = {
 
     async JustifyAbsence(_, { input }, contextValue) {
       const data = await callAssistance(
-        `mutation($input: JustifyAbsenceInputInput!) {
+        `mutation($input: JustifyAbsenceInput!) {
           JustifyAbsence(input: $input) {
             absenceId
             valid

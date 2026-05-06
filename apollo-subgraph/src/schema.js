@@ -37,9 +37,9 @@ export const typeDefs = parse(/* GraphQL */ `
   }
 
   type Mutation {
-    RegisterAttendance(input: RegisterAttendanceInputInput!): RegisterAttendanceOutput
-    SaveJustification(input: SaveJustificationInputInput!): SaveJustificationOutput
-    JustifyAbsence(input: JustifyAbsenceInputInput!): JustifyAbsenceOutput
+    RegisterAttendance(input: RegisterAttendanceInput!): RegisterAttendanceOutput
+    SaveJustification(input: SaveJustificationInput!): SaveJustificationOutput
+    JustifyAbsence(input: JustifyAbsenceInput!): JustifyAbsenceOutput
   }
 
   type DashboardOutput {
@@ -126,18 +126,18 @@ export const typeDefs = parse(/* GraphQL */ `
     status: String
   }
 
-  input RegisterAttendanceInputInput {
+  input RegisterAttendanceInput {
     projectId: String!
     latitude: Float
     longitude: Float
     photoUrl: String
   }
 
-  input JustifyAbsenceInputInput {
+  input JustifyAbsenceInput {
     absenceId: String!
   }
 
-  input SaveJustificationInputInput {
+  input SaveJustificationInput {
     absenceId: String!
     description: String!
     documentUrl: String
