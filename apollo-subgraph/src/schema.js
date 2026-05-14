@@ -2,10 +2,6 @@ import { parse } from 'graphql';
 
 export const typeDefs = parse(/* GraphQL */ `
   extend schema
-    @link(
-      url: "https://specs.apollo.dev/federation/v2.3",
-      import: ["@key"]
-    )
 
   type Query {
     GetDashboard(fromDate: String, toDate: String): DashboardOutput

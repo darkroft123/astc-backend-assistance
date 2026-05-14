@@ -1,4 +1,4 @@
-const ASSISTANCE_URL = process.env.ASSISTANCE_GRAPHQL_URL;
+const ASSISTANCE_URL = process.env.ASSISTANCE_URL;
 
 function normalizeValue(value) {
   if (Array.isArray(value)) {

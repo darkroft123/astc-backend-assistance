@@ -6,6 +6,7 @@ import lombok.*;
 import java.util.UUID;
 
 @Key(fields = @FieldSet("id"))
+//@Key(fields = "id") falla
 @Getter
 @Setter
 @NoArgsConstructor
