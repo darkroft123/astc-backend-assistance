@@ -1,7 +1,9 @@
 package com.smms.assistance.infrastructure.controller.graphql.dto;
 
 import lombok.*;
+import org.eclipse.microprofile.graphql.Input;
 
+@Input
 @Getter
 @Setter
 @NoArgsConstructor
