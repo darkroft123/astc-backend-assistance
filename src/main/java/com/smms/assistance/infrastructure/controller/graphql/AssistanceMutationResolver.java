@@ -12,6 +12,7 @@ import com.smms.assistance.infrastructure.controller.graphql.dto.SaveJustificati
 import com.smms.assistance.infrastructure.controller.graphql.dto.SaveJustificationOutput;
 import com.smms.assistance.infrastructure.security.AuthContext;
 import jakarta.inject.Inject;
+import jakarta.annotation.security.RolesAllowed;
 import org.eclipse.microprofile.graphql.GraphQLApi;
 import org.eclipse.microprofile.graphql.Mutation;
 import org.eclipse.microprofile.graphql.Name;
@@ -19,6 +20,7 @@ import org.eclipse.microprofile.graphql.Name;
 import java.util.UUID;
 
 @GraphQLApi
+@RolesAllowed("TEAM_MEMBER")
 public class AssistanceMutationResolver {
 
     @Inject
