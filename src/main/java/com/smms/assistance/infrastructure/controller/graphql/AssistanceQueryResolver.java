@@ -5,52 +5,86 @@ import com.smms.assistance.application.in.GetJustificationStatusPort;
 import com.smms.assistance.application.in.ListAbsencesPort;
 import com.smms.assistance.application.in.ListAttendancePort;
 import com.smms.assistance.application.in.ListJustificationsPort;
-import com.smms.assistance.infrastructure.controller.graphql.dto.AbsencePageOutput;
-import com.smms.assistance.infrastructure.controller.graphql.dto.AttendancePageOutput;
-import com.smms.assistance.infrastructure.controller.graphql.dto.DashboardOutput;
-import com.smms.assistance.infrastructure.controller.graphql.dto.DtoMapper;
-import com.smms.assistance.infrastructure.controller.graphql.dto.JustificationPageOutput;
-import com.smms.assistance.infrastructure.controller.graphql.dto.JustificationStatusOutput;
+
+import com.smms.assistance.infrastructure.controller.graphql.dto.*;
+
 import com.smms.assistance.infrastructure.security.AuthContext;
+
 import jakarta.annotation.security.RolesAllowed;
+import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+
 import org.eclipse.microprofile.graphql.GraphQLApi;
 import org.eclipse.microprofile.graphql.Name;
 import org.eclipse.microprofile.graphql.Query;
+
+import org.jboss.logging.Logger;
 
 import java.time.LocalDate;
 import java.util.UUID;
 
 @GraphQLApi
+@ApplicationScoped
 @RolesAllowed("TEAM_MEMBER")
 public class AssistanceQueryResolver {
 
+    private static final Logger LOG =
+            Logger.getLogger(AssistanceQueryResolver.class);
+
     @Inject
     AuthContext authContext;
+
     @Inject
     GetDashboardPort getDashboardPort;
+
     @Inject
     ListAttendancePort listAttendancePort;
+
     @Inject
     ListAbsencesPort listAbsencesPort;
+
     @Inject
     ListJustificationsPort listJustificationsPort;
+
     @Inject
     GetJustificationStatusPort getJustificationStatusPort;
 
+    // =========================
+    // GET DASHBOARD
+    // =========================
     @Query("GetDashboard")
     public DashboardOutput getDashboard(
             @Name("fromDate") String fromDate,
             @Name("toDate") String toDate) {
 
-        UUID userId = authContext.getUserId();
-        LocalDate from = fromDate != null ? LocalDate.parse(fromDate) : null;
-        LocalDate to = toDate != null ? LocalDate.parse(toDate) : null;
+        logSecurity("GetDashboard");
 
-        return DtoMapper.toDashboardOutput(
-                getDashboardPort.execute(userId, from, to));
+        UUID userId = authContext.getUserId();
+
+        LOG.info("📌 USER ID: " + userId);
+
+        LocalDate from =
+                fromDate != null
+                        ? LocalDate.parse(fromDate)
+                        : null;
+
+        LocalDate to =
+                toDate != null
+                        ? LocalDate.parse(toDate)
+                        : null;
+
+        DashboardOutput output =
+                DtoMapper.toDashboardOutput(
+                        getDashboardPort.execute(userId, from, to));
+
+        LOG.info("✅ DASHBOARD LOADED");
+
+        return output;
     }
 
+    // =========================
+    // LIST ATTENDANCE
+    // =========================
     @Query("ListAttendance")
     public AttendancePageOutput listAttendance(
             @Name("page") int page,
@@ -60,12 +94,26 @@ public class AssistanceQueryResolver {
             @Name("toDate") String toDate,
             @Name("status") String status) {
 
+        logSecurity("ListAttendance");
+
         UUID userId = authContext.getUserId();
 
+        LOG.info("📌 USER ID: " + userId);
+
         return DtoMapper.toAttendancePage(
-                listAttendancePort.execute(userId, page, size, projectId, fromDate, toDate, status));
+                listAttendancePort.execute(
+                        userId,
+                        page,
+                        size,
+                        projectId,
+                        fromDate,
+                        toDate,
+                        status));
     }
 
+    // =========================
+    // LIST ABSENCES
+    // =========================
     @Query("ListAbsences")
     public AbsencePageOutput listAbsences(
             @Name("page") int page,
@@ -76,12 +124,27 @@ public class AssistanceQueryResolver {
             @Name("type") String type,
             @Name("justified") Boolean justified) {
 
+        logSecurity("ListAbsences");
+
         UUID userId = authContext.getUserId();
 
+        LOG.info("📌 USER ID: " + userId);
+
         return DtoMapper.toAbsencePage(
-                listAbsencesPort.execute(userId, page, size, projectId, fromDate, toDate, type, justified));
+                listAbsencesPort.execute(
+                        userId,
+                        page,
+                        size,
+                        projectId,
+                        fromDate,
+                        toDate,
+                        type,
+                        justified));
     }
 
+    // =========================
+    // LIST JUSTIFICATIONS
+    // =========================
     @Query("ListJustifications")
     public JustificationPageOutput listJustifications(
             @Name("page") int page,
@@ -90,19 +153,63 @@ public class AssistanceQueryResolver {
             @Name("fromDate") String fromDate,
             @Name("toDate") String toDate) {
 
+        logSecurity("ListJustifications");
+
         UUID userId = authContext.getUserId();
 
+        LOG.info("📌 USER ID: " + userId);
+
         return DtoMapper.toJustificationPage(
-                listJustificationsPort.execute(userId, page, size, status, fromDate, toDate));
+                listJustificationsPort.execute(
+                        userId,
+                        page,
+                        size,
+                        status,
+                        fromDate,
+                        toDate));
     }
 
+    // =========================
+    // GET JUSTIFICATION STATUS
+    // =========================
     @Query("GetJustificationStatus")
     public JustificationStatusOutput getJustificationStatus(
             @Name("justificationId") UUID justificationId) {
 
+        logSecurity("GetJustificationStatus");
+
         UUID userId = authContext.getUserId();
 
+        LOG.info("📌 USER ID: " + userId);
+        LOG.info("📌 JUSTIFICATION ID: " + justificationId);
+
         return DtoMapper.toJustificationStatusOutput(
-                getJustificationStatusPort.execute(userId, justificationId));
+                getJustificationStatusPort.execute(
+                        userId,
+                        justificationId));
+    }
+
+    // =========================
+    // SECURITY LOGGER
+    // =========================
+    private void logSecurity(String method) {
+
+        LOG.info("====================================");
+        LOG.info("🔥 ENTER: " + method);
+
+        try {
+
+            UUID userId = authContext.getUserId();
+
+            LOG.info("🔐 JWT DETECTED");
+            LOG.info("👤 USER ID: " + userId);
+
+        } catch (Exception e) {
+
+            LOG.error("❌ JWT NOT DETECTED");
+            LOG.error(e.getMessage());
+        }
+
+        LOG.info("====================================");
     }
 }
