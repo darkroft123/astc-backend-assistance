@@ -5,7 +5,6 @@ import com.smms.assistance.application.in.RegisterAttendancePort;
 import com.smms.assistance.application.in.SaveJustificationPort;
 
 import com.smms.assistance.infrastructure.controller.graphql.dto.*;
-
 import com.smms.assistance.infrastructure.security.AuthContext;
 
 import jakarta.annotation.security.RolesAllowed;
@@ -13,8 +12,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import org.eclipse.microprofile.graphql.*;
-
 import org.jboss.logging.Logger;
+import com.smms.assistance.infrastructure.client.AlertsClient;
+
 
 import java.util.UUID;
 
@@ -25,6 +25,9 @@ public class AssistanceMutationResolver {
 
     private static final Logger LOG =
             Logger.getLogger(AssistanceMutationResolver.class);
+
+    @Inject
+    AlertsClient alertsClient;
 
     @Inject
     AuthContext authContext;
@@ -47,19 +50,32 @@ public class AssistanceMutationResolver {
 
         logSecurity("RegisterAttendance");
 
-        authContext.assertTeamMember();
-
         UUID userId = authContext.getUserId();
 
-        LOG.info("📌 USER ID: " + userId);
+        LOG.infof("🚀 RegisterAttendance START -> userId=%s input=%s", userId, input);
 
-        RegisterAttendanceOutput output =
-                DtoMapper.toRegisterAttendanceOutput(
-                        registerAttendancePort.execute(userId, input));
+        try {
+            LOG.info("📦 Calling RegisterAttendancePort...");
 
-        LOG.info("✅ ATTENDANCE REGISTERED");
+            var result = registerAttendancePort.execute(userId, input);
 
-        return output;
+            if (result != null) {
+                alertsClient.sendAlert(result);
+            }
+
+            LOG.info("📤 Port executed successfully -> checking S3/MinIO upload...");
+
+            RegisterAttendanceOutput output =
+                    DtoMapper.toRegisterAttendanceOutput(result);
+
+            LOG.infof("🏁 RegisterAttendance SUCCESS -> userId=%s", userId);
+
+            return output;
+
+        } catch (Exception e) {
+            LOG.error("❌ RegisterAttendance FAILED", e);
+            throw e;
+        }
     }
 
     // =========================
@@ -71,23 +87,27 @@ public class AssistanceMutationResolver {
 
         logSecurity("JustifyAbsence");
 
-        authContext.assertTeamMember();
-
         UUID userId = authContext.getUserId();
 
-        LOG.info("📌 USER ID: " + userId);
-        LOG.info("📌 ABSENCE ID: " + input.getAbsenceId());
+        LOG.infof("🚀 JustifyAbsence START -> userId=%s absenceId=%s",
+                userId, input.getAbsenceId());
 
-        var absence =
-                justifyAbsencePort.execute(
-                        userId,
-                        input.getAbsenceId());
+        try {
+            var absence =
+                    justifyAbsencePort.execute(userId, input.getAbsenceId());
 
-        LOG.info("✅ ABSENCE JUSTIFIED");
+            LOG.info("☁️ Absence processed (check S3 if evidence attached)");
 
-        return new JustifyAbsenceOutput(
-                absence.getId(),
-                true);
+            LOG.info("✅ ABSENCE JUSTIFIED SUCCESS");
+
+            return new JustifyAbsenceOutput(
+                    absence.getId(),
+                    true);
+
+        } catch (Exception e) {
+            LOG.error("❌ JustifyAbsence FAILED", e);
+            throw e;
+        }
     }
 
     // =========================
@@ -99,19 +119,27 @@ public class AssistanceMutationResolver {
 
         logSecurity("SaveJustification");
 
-        authContext.assertTeamMember();
-
         UUID userId = authContext.getUserId();
 
-        LOG.info("📌 USER ID: " + userId);
+        LOG.infof("🚀 SaveJustification START -> userId=%s", userId);
 
-        SaveJustificationOutput output =
-                DtoMapper.toSaveJustificationOutput(
-                        saveJustificationPort.execute(userId, input));
+        try {
+            var result =
+                    saveJustificationPort.execute(userId, input);
 
-        LOG.info("✅ JUSTIFICATION SAVED");
+            SaveJustificationOutput output =
+                    DtoMapper.toSaveJustificationOutput(result);
 
-        return output;
+            LOG.info("📦 Justification saved (check if file uploaded to MinIO)");
+
+            LOG.info("✅ SAVE JUSTIFICATION SUCCESS");
+
+            return output;
+
+        } catch (Exception e) {
+            LOG.error("❌ SaveJustification FAILED", e);
+            throw e;
+        }
     }
 
     // =========================
@@ -120,18 +148,16 @@ public class AssistanceMutationResolver {
     private void logSecurity(String method) {
 
         LOG.info("====================================");
-        LOG.info("🔥 ENTER: " + method);
+        LOG.info("🔥 ENTER METHOD: " + method);
 
         try {
-
             UUID userId = authContext.getUserId();
 
-            LOG.info("🔐 JWT DETECTED");
-            LOG.info("👤 USER ID: " + userId);
+            LOG.info("🔐 JWT VALID");
+            LOG.infof("👤 USER ID: %s", userId);
 
         } catch (Exception e) {
-
-            LOG.error("❌ JWT NOT DETECTED");
+            LOG.error("❌ JWT NOT FOUND OR INVALID");
             LOG.error(e.getMessage());
         }
 
