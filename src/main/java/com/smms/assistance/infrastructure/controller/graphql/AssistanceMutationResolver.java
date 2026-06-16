@@ -45,38 +45,45 @@ public class AssistanceMutationResolver {
     // REGISTER ATTENDANCE
     // =========================
     @Mutation("RegisterAttendance")
-    public RegisterAttendanceOutput registerAttendance(
-            @Name("input") RegisterAttendanceInput input) {
+public RegisterAttendanceOutput registerAttendance(
+        @Name("input") RegisterAttendanceInput input) {
 
-        logSecurity("RegisterAttendance");
+    logSecurity("RegisterAttendance");
 
-        UUID userId = authContext.getUserId();
+    UUID userId = authContext.getUserId();
 
-        LOG.infof("🚀 RegisterAttendance START -> userId=%s input=%s", userId, input);
+    LOG.infof("🚀 RegisterAttendance START -> userId=%s input=%s", userId, input);
 
-        try {
-            LOG.info("📦 Calling RegisterAttendancePort...");
+    // 👇 AQUÍ LO AGREGAS
+    LOG.info("INPUT RECEIVED: " + input);
+    LOG.info("PROJECT ID: " + input.getProjectId());
+    LOG.info("LAT: " + input.getLatitude());
+    LOG.info("LNG: " + input.getLongitude());
+    LOG.info("PHOTO SIZE: " + (input.getPhotoUrl() != null ? input.getPhotoUrl().length() : 0));
 
-            var result = registerAttendancePort.execute(userId, input);
+    try {
+        LOG.info("📦 Calling RegisterAttendancePort...");
 
-            if (result != null) {
-                alertsClient.sendAlert(result);
-            }
+        var result = registerAttendancePort.execute(userId, input);
 
-            LOG.info("📤 Port executed successfully -> checking S3/MinIO upload...");
-
-            RegisterAttendanceOutput output =
-                    DtoMapper.toRegisterAttendanceOutput(result);
-
-            LOG.infof("🏁 RegisterAttendance SUCCESS -> userId=%s", userId);
-
-            return output;
-
-        } catch (Exception e) {
-            LOG.error("❌ RegisterAttendance FAILED", e);
-            throw e;
+        if (result != null) {
+            alertsClient.sendAlert(result);
         }
+
+        LOG.info("📤 Port executed successfully -> checking S3/MinIO upload...");
+
+        RegisterAttendanceOutput output =
+                DtoMapper.toRegisterAttendanceOutput(result);
+
+        LOG.infof("🏁 RegisterAttendance SUCCESS -> userId=%s", userId);
+
+        return output;
+
+    } catch (Exception e) {
+        LOG.error("❌ RegisterAttendance FAILED", e);
+        throw e;
     }
+}
 
     // =========================
     // JUSTIFY ABSENCE

@@ -1,6 +1,8 @@
 package com.smms.assistance.infrastructure.controller.graphql.dto;
 
 import lombok.*;
+import org.eclipse.microprofile.graphql.Input;
+
 import java.util.UUID;
 
 @Getter
@@ -8,6 +10,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@Input("RegisterAttendanceInput")
 public class RegisterAttendanceInput {
 
     private UUID projectId;

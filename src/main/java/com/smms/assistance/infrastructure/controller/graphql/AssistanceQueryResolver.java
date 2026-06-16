@@ -49,6 +49,18 @@ public class AssistanceQueryResolver {
     @Inject
     GetJustificationStatusPort getJustificationStatusPort;
 
+    @Inject
+    com.smms.assistance.infrastructure.client.ProjectManagerClientWrapper pmClientWrapper;
+
+    // =========================
+    // GET MY PROJECTS
+    // =========================
+    @Query("GetMyProjects")
+    public java.util.List<com.smms.assistance.infrastructure.client.ProjectOutput> getMyProjects() {
+        logSecurity("GetMyProjects");
+        return pmClientWrapper.getMyProjects();
+    }
+
     // =========================
     // GET DASHBOARD
     // =========================
