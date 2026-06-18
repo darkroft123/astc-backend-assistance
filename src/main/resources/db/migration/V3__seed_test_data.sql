@@ -13,7 +13,7 @@ INSERT INTO attendances (
     updated_at
 ) VALUES (
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    '11111111-1111-1111-1111-111111111111',
+    '00000000-0000-0000-0000-000000000002',
     NULL,
     CURRENT_DATE,
     CURRENT_TIME,
@@ -37,7 +37,7 @@ INSERT INTO absences (
     updated_at
 ) VALUES (
     'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-    '11111111-1111-1111-1111-111111111111',
+    '00000000-0000-0000-0000-000000000002',
     NULL,
     CURRENT_DATE,
     'MEDICAL',
@@ -62,7 +62,7 @@ INSERT INTO justifications (
 ) VALUES (
     'cccccccc-cccc-cccc-cccc-cccccccccccc',
     'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-    '11111111-1111-1111-1111-111111111111',
+    '00000000-0000-0000-0000-000000000002',
     'Justificación de prueba',
     'https://test.com/doc.pdf',
     'PENDING',

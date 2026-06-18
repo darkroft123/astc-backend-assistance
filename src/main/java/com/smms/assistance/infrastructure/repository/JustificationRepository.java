@@ -71,4 +71,81 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
     public Optional<JustificationEntity> findByAbsenceId(UUID absenceId) {
         return find("absenceId", absenceId).firstResultOptional();
     }
+
+    public List<JustificationEntity> findByUsers(
+            List<UUID> userIds,
+            String status,
+            LocalDate from,
+            LocalDate to,
+            int page,
+            int size) {
+
+        System.out.println("[Assistance PM API] [DB Query] findByUsers (justifications) starting -> userIds: " + userIds + ", status: " + status + ", page: " + page + ", size: " + size);
+
+        StringBuilder query = new StringBuilder("1 = 1");
+        Map<String, Object> params = new HashMap<>();
+
+        if (userIds != null && !userIds.isEmpty()) {
+            query.append(" and userId in :userIds");
+            params.put("userIds", userIds);
+        } else {
+            query.append(" and 1 = 0");
+        }
+
+        if (status != null) {
+            query.append(" and status = :status");
+            params.put("status", status);
+        }
+        if (from != null) {
+            query.append(" and submittedAt >= :from");
+            params.put("from", from.atStartOfDay());
+        }
+        if (to != null) {
+            query.append(" and submittedAt <= :to");
+            params.put("to", to.plusDays(1).atStartOfDay());
+        }
+
+        List<JustificationEntity> result = find(query.toString(), Sort.by("submittedAt").descending(), params)
+                .page(Page.of(page, size))
+                .list();
+
+        System.out.println("[Assistance PM API] [DB Query] findByUsers (justifications) completed -> matched records: " + result.size());
+        return result;
+    }
+
+    public long countByUsers(
+            List<UUID> userIds,
+            String status,
+            LocalDate from,
+            LocalDate to) {
+
+        System.out.println("[Assistance PM API] [DB Query] countByUsers (justifications) starting -> userIds: " + userIds + ", status: " + status);
+
+        StringBuilder query = new StringBuilder("1 = 1");
+        Map<String, Object> params = new HashMap<>();
+
+        if (userIds != null && !userIds.isEmpty()) {
+            query.append(" and userId in :userIds");
+            params.put("userIds", userIds);
+        } else {
+            return 0;
+        }
+
+        if (status != null) {
+            query.append(" and status = :status");
+            params.put("status", status);
+        }
+        if (from != null) {
+            query.append(" and submittedAt >= :from");
+            params.put("from", from.atStartOfDay());
+        }
+        if (to != null) {
+            query.append(" and submittedAt <= :to");
+            params.put("to", to.plusDays(1).atStartOfDay());
+        }
+
+        long count = count(query.toString(), params);
+        System.out.println("[Assistance PM API] [DB Query] countByUsers (justifications) completed -> total count: " + count);
+        return count;
+    }
 }

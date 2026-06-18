@@ -27,6 +27,7 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
     @Inject OutboxEventPublisher outboxPublisher;
     @Inject S3StorageAdapter s3StorageAdapter;
     @Inject ProjectManagerClientWrapper pmClientWrapper;
+    @Inject com.smms.assistance.infrastructure.client.AlertsClient alertsClient;
 
     @Override
     @Transactional
@@ -49,10 +50,12 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
         }
 
         boolean isAssigned = false;
+        ProjectOutput matchedProject = null;
         if (assignedProjects != null && input.getProjectId() != null) {
             for (ProjectOutput project : assignedProjects) {
                 if (project.id != null && project.id.equals(input.getProjectId())) {
                     isAssigned = true;
+                    matchedProject = project;
                     break;
                 }
             }
@@ -150,6 +153,61 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
             + ", projectId: " + input.getProjectId() 
             + ", timestamp: " + timestamp 
             + ", attendanceId: " + entity.getId());
+
+    // --- ORCHESTRATE STATELESS ALERTS ANALYSIS ---
+    try {
+        if (matchedProject != null) {
+            System.out.println("📝 [Orchestrator] Match result: Project details retrieved successfully for projectId: " + input.getProjectId());
+            
+            String dateStr = LocalDate.now().toString();
+            String checkInStr = LocalTime.now().toString();
+            
+            var alertPayload = new com.smms.assistance.infrastructure.client.AlertRequestPayload(
+                entity.getId(),
+                userId,
+                entity.getProjectId(),
+                dateStr,
+                checkInStr,
+                entity.getLatitude(),
+                entity.getLongitude(),
+                entity.getPhotoUrl(),
+                matchedProject.getLatitude(),
+                matchedProject.getLongitude(),
+                matchedProject.getRadius(),
+                matchedProject.getWorkStartTime(),
+                matchedProject.getWorkEndTime(),
+                matchedProject.getGraceMinutes()
+            );
+
+            System.out.println("📝 [Orchestrator] Payload generated for Alerts Service. Sending asynchronously...");
+            
+            // Invoke the Alerts Service (AI engine) via client
+            com.smms.assistance.infrastructure.client.AlertResponsePayload aiResult = alertsClient.sendAlert(alertPayload);
+            
+            if (aiResult != null) {
+                System.out.println("📝 [Orchestrator] Response received from Alerts Service: alert=" + aiResult.alert);
+                if (aiResult.alert) {
+                    System.out.println("🚨 [Orchestrator] Decision: alert created. Calling Project Manager CreateAlert mutation...");
+                    pmClientWrapper.createAlert(
+                        userId,
+                        entity.getProjectId(),
+                        aiResult.type != null ? aiResult.type : "UNKNOWN",
+                        aiResult.message != null ? aiResult.message : "AI validation flagged anomaly",
+                        entity.getLatitude(),
+                        entity.getLongitude()
+                    );
+                } else {
+                    System.out.println("✅ [Orchestrator] Decision: alert ignored (no anomaly detected).");
+                }
+            }
+        } else {
+            System.out.println("⚠️ [Orchestrator] Project details not found during matching. Skipping alert analysis.");
+        }
+    } catch (Exception e) {
+        // MUST NOT break attendance flow
+        System.out.println("❌ [Orchestrator] Error from AI service or alert persistence: " + e.getMessage());
+        e.printStackTrace();
+    }
 
     return entity;
 }

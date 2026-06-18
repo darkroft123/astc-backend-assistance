@@ -7,7 +7,9 @@ WORKDIR /build
 
 # cache de dependencias (MEJORA IMPORTANTE)
 COPY pom.xml .
-RUN mvn -B dependency:go-offline
+RUN mvn -B dependency:go-offline \
+    -Dhttps.protocols=TLSv1.2 \
+    -Dmaven.wagon.http.pool=false
 
 # source
 COPY src ./src

@@ -76,4 +76,50 @@ public class AbsenceRepository implements PanacheRepositoryBase<AbsenceEntity, U
 
         return count(query.toString(), params);
     }
+
+    public long countByUsers(
+            List<UUID> userIds,
+            UUID projectId,
+            LocalDate from,
+            LocalDate to,
+            String type,
+            Boolean justified) {
+
+        System.out.println("[Assistance PM API] [DB Query] countByUsers (absences) starting -> userIds: " + userIds + ", projectId: " + projectId + ", justified: " + justified);
+
+        StringBuilder query = new StringBuilder("1 = 1");
+        Map<String, Object> params = new HashMap<>();
+
+        if (userIds != null && !userIds.isEmpty()) {
+            query.append(" and userId in :userIds");
+            params.put("userIds", userIds);
+        } else {
+            return 0;
+        }
+
+        if (projectId != null) {
+            query.append(" and projectId = :projectId");
+            params.put("projectId", projectId);
+        }
+        if (from != null) {
+            query.append(" and date >= :from");
+            params.put("from", from);
+        }
+        if (to != null) {
+            query.append(" and date <= :to");
+            params.put("to", to);
+        }
+        if (type != null && !type.isBlank()) {
+            query.append(" and type = :type");
+            params.put("type", type);
+        }
+        if (justified != null) {
+            query.append(" and justified = :justified");
+            params.put("justified", justified);
+        }
+
+        long count = count(query.toString(), params);
+        System.out.println("[Assistance PM API] [DB Query] countByUsers (absences) completed -> total count: " + count);
+        return count;
+    }
 }

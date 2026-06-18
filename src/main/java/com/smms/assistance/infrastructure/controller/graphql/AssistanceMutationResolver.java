@@ -20,7 +20,7 @@ import java.util.UUID;
 
 @GraphQLApi
 @ApplicationScoped
-@RolesAllowed({"TEAM_MEMBER"})
+@RolesAllowed({"TEAM_MEMBER", "PROJECT_MANAGER"})
 public class AssistanceMutationResolver {
 
     private static final Logger LOG =
@@ -31,6 +31,12 @@ public class AssistanceMutationResolver {
 
     @Inject
     AuthContext authContext;
+
+    @Inject
+    com.smms.assistance.application.in.ApproveJustificationPort approveJustificationPort;
+
+    @Inject
+    com.smms.assistance.application.in.RejectJustificationPort rejectJustificationPort;
 
     @Inject
     RegisterAttendancePort registerAttendancePort;
@@ -45,6 +51,7 @@ public class AssistanceMutationResolver {
     // REGISTER ATTENDANCE
     // =========================
     @Mutation("RegisterAttendance")
+    @RolesAllowed("TEAM_MEMBER")
 public RegisterAttendanceOutput registerAttendance(
         @Name("input") RegisterAttendanceInput input) {
 
@@ -66,10 +73,6 @@ public RegisterAttendanceOutput registerAttendance(
 
         var result = registerAttendancePort.execute(userId, input);
 
-        if (result != null) {
-            alertsClient.sendAlert(result);
-        }
-
         LOG.info("📤 Port executed successfully -> checking S3/MinIO upload...");
 
         RegisterAttendanceOutput output =
@@ -89,6 +92,7 @@ public RegisterAttendanceOutput registerAttendance(
     // JUSTIFY ABSENCE
     // =========================
     @Mutation("JustifyAbsence")
+    @RolesAllowed("TEAM_MEMBER")
     public JustifyAbsenceOutput justifyAbsence(
             @Name("input") JustifyAbsenceInput input) {
 
@@ -121,6 +125,7 @@ public RegisterAttendanceOutput registerAttendance(
     // SAVE JUSTIFICATION
     // =========================
     @Mutation("SaveJustification")
+    @RolesAllowed("TEAM_MEMBER")
     public SaveJustificationOutput saveJustification(
             @Name("input") SaveJustificationInput input) {
 
@@ -169,5 +174,49 @@ public RegisterAttendanceOutput registerAttendance(
         }
 
         LOG.info("====================================");
+    }
+
+    // ==========================================
+    // PROJECT MANAGER MUTATIONS
+    // ==========================================
+
+    @Mutation("ApproveJustificationPM")
+    @RolesAllowed("PROJECT_MANAGER")
+    public JustificationOutput approveJustificationPM(
+            @Name("justificationId") UUID justificationId,
+            @Name("comment") String comment,
+            @Name("reviewedBy") UUID reviewedBy
+    ) {
+        UUID currentPmId = authContext.getUserId();
+        System.out.println("[Assistance PM API] [Mutation] ApproveJustificationPM initiated by PM: " + currentPmId 
+                + " -> justificationId: " + justificationId 
+                + ", comment: " + comment 
+                + ", reviewedBy: " + reviewedBy);
+
+        var result = approveJustificationPort.execute(justificationId, comment, reviewedBy);
+
+        System.out.println("[Assistance PM API] [Mutation] ApproveJustificationPM completed -> justificationId: " + justificationId + ", new status: " + result.getStatus());
+
+        return DtoMapper.toJustificationOutput(result);
+    }
+
+    @Mutation("RejectJustificationPM")
+    @RolesAllowed("PROJECT_MANAGER")
+    public JustificationOutput rejectJustificationPM(
+            @Name("justificationId") UUID justificationId,
+            @Name("comment") String comment,
+            @Name("reviewedBy") UUID reviewedBy
+    ) {
+        UUID currentPmId = authContext.getUserId();
+        System.out.println("[Assistance PM API] [Mutation] RejectJustificationPM initiated by PM: " + currentPmId 
+                + " -> justificationId: " + justificationId 
+                + ", comment: " + comment 
+                + ", reviewedBy: " + reviewedBy);
+
+        var result = rejectJustificationPort.execute(justificationId, comment, reviewedBy);
+
+        System.out.println("[Assistance PM API] [Mutation] RejectJustificationPM completed -> justificationId: " + justificationId + ", new status: " + result.getStatus());
+
+        return DtoMapper.toJustificationOutput(result);
     }
 }
