@@ -1,13 +1,16 @@
 package com.smms.assistance.application.usecase;
 
 import com.smms.assistance.application.in.RegisterAttendancePort;
+import com.smms.assistance.domain.entity.AbsenceEntity;
 import com.smms.assistance.domain.entity.AttendanceEntity;
 import com.smms.assistance.infrastructure.controller.graphql.dto.RegisterAttendanceInput;
 import com.smms.assistance.infrastructure.messaging.OutboxEventPublisher;
+import com.smms.assistance.infrastructure.repository.AbsenceRepository;
 import com.smms.assistance.infrastructure.repository.AttendanceRepository;
 import com.smms.assistance.infrastructure.storage.S3StorageAdapter;
 import com.smms.assistance.infrastructure.client.ProjectManagerClientWrapper;
 import com.smms.assistance.infrastructure.client.ProjectOutput;
+import com.smms.assistance.shared.util.TimezoneService;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -16,6 +19,7 @@ import jakarta.transaction.Transactional;
 import java.io.ByteArrayInputStream;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZonedDateTime;
 import java.util.Base64;
 import java.util.UUID;
 import java.util.List;
@@ -28,13 +32,14 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
     @Inject S3StorageAdapter s3StorageAdapter;
     @Inject ProjectManagerClientWrapper pmClientWrapper;
     @Inject com.smms.assistance.infrastructure.client.AlertsClient alertsClient;
+    @Inject AbsenceRepository absenceRepository;
 
     @Override
     @Transactional
     public AttendanceEntity execute(UUID userId, RegisterAttendanceInput input) {
 
-        java.time.LocalDateTime timestamp = java.time.LocalDateTime.now();
-        System.out.println("📝 [Audit Log] Attendance registration attempt - userId: " + userId 
+        java.time.LocalDateTime timestamp = TimezoneService.utcNow();
+        System.out.println("[Audit Log] Attendance registration attempt - userId: " + userId 
                 + ", projectId: " + input.getProjectId() 
                 + ", timestamp: " + timestamp);
 
@@ -42,7 +47,7 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
         try {
             assignedProjects = pmClientWrapper.getMyProjects();
         } catch (Exception e) {
-            System.out.println("❌ [Audit Log] Attendance registration failed - userId: " + userId 
+            System.out.println("[Audit Log] Attendance registration failed - userId: " + userId 
                     + ", projectId: " + input.getProjectId() 
                     + ", timestamp: " + timestamp 
                     + ", reason: Failed to retrieve assigned projects from Project Manager");
@@ -62,18 +67,60 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
         }
 
         if (!isAssigned) {
-            System.out.println("❌ [Audit Log] Validation failure: projectId " + input.getProjectId() 
+            System.out.println("[Audit Log] Validation failure: projectId " + input.getProjectId() 
                     + " is not part of the user's assigned projects. userId: " + userId);
-            System.out.println("❌ [Audit Log] Attendance registration failed - userId: " + userId 
+            System.out.println("[Audit Log] Attendance registration failed - userId: " + userId 
                     + ", projectId: " + input.getProjectId() 
                     + ", timestamp: " + timestamp 
                     + ", reason: Project ID is not assigned to user");
-            throw new IllegalArgumentException("El proyecto no está asignado a este usuario.");
+            throw new IllegalArgumentException("El proyecto no esta asignado a este usuario.");
         }
+
+        // SINGLE TIME SOURCE -- Project's configured timezone
+        String projectTimezone = (matchedProject != null && matchedProject.getTimezone() != null)
+                ? matchedProject.getTimezone()
+                : TimezoneService.defaultTimezone();
+        ZonedDateTime nowInProjectZone = TimezoneService.zonedNow(projectTimezone);
+        LocalDate today = nowInProjectZone.toLocalDate();
+        LocalTime nowTime = nowInProjectZone.toLocalTime();
+
+    // Step 1: Check if attendance already exists for today
+    boolean existsToday = attendanceRepository
+            .find("userId = ?1 and projectId = ?2 and date = ?3", userId, input.getProjectId(), today)
+            .firstResultOptional()
+            .isPresent();
+
+    System.out.println("[Attendance] EXISTS_TODAY=" + existsToday
+            + " | userId=" + userId + " projectId=" + input.getProjectId() + " date=" + today);
+
+    // Step 2: If exists, evaluate replace flag BEFORE any error
+    if (existsToday) {
+        boolean shouldReplace = Boolean.TRUE.equals(input.getReplace());
+        System.out.println("[Attendance] REPLACE_ENABLED=" + shouldReplace);
+
+        if (shouldReplace) {
+            long deleted = attendanceRepository.delete(
+                    "userId = ?1 and projectId = ?2 and date = ?3",
+                    userId, input.getProjectId(), today
+            );
+            System.out.println("[Attendance] DELETED_AND_RECREATED | deleted=" + deleted
+                    + " records for userId=" + userId);
+        } else {
+            throw new IllegalStateException("Ya registraste tu asistencia para este proyecto hoy.");
+        }
+    }
+
+    // Classify attendance based on effective schedule (backend only)
+    String attendanceStatus = classifyAttendance(matchedProject, nowTime);
+    System.out.println("[Attendance] CLASSIFICATION=" + attendanceStatus
+            + " | checkIn=" + nowTime
+            + " | workStart=" + (matchedProject != null ? matchedProject.getWorkStartTime() : "null")
+            + " | grace=" + (matchedProject != null ? matchedProject.getGraceMinutes() : 0));
 
     UUID attendanceId = UUID.randomUUID();
 
     String photoUrl = null;
+    String alertsPhotoUrl = null;
 
     if (input.getPhotoUrl() != null && !input.getPhotoUrl().isBlank()) {
 
@@ -93,8 +140,6 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
 
             ByteArrayInputStream stream = new ByteArrayInputStream(decoded);
 
-            LocalDate today = LocalDate.now();
-
             String folder =
                     "private/user/"
                             + userId
@@ -105,13 +150,16 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
 
             String filename = attendanceId + ".jpg";
 
-            photoUrl = s3StorageAdapter.upload(
+            String key = s3StorageAdapter.upload(
                     folder,
                     filename,
                     stream,
                     decoded.length,
                     "image/jpeg"
             );
+
+            photoUrl = key;
+            alertsPhotoUrl = s3StorageAdapter.generatePresignedUrl(key, 120);
 
         } catch (Exception e) {
 
@@ -126,16 +174,39 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
             .id(attendanceId)
             .userId(userId)
             .projectId(input.getProjectId())
-            .date(LocalDate.now())
-            .checkIn(LocalTime.now())
+            .date(today)
+            .checkIn(nowTime)
             .checkOut(null)
-            .status("CHECKED_IN")
+            .status(attendanceStatus)
             .latitude(input.getLatitude())
             .longitude(input.getLongitude())
             .photoUrl(photoUrl)
             .build();
 
     attendanceRepository.persist(entity);
+
+    // Auto-generate absence when check-in is outside the allowed schedule window
+    if ("OUTSIDE_SCHEDULE".equals(attendanceStatus) || "EARLY".equals(attendanceStatus)) {
+        boolean hasAbsence = absenceRepository
+                .find("userId = ?1 and projectId = ?2 and date = ?3", userId, input.getProjectId(), today)
+                .firstResultOptional()
+                .isPresent();
+        if (!hasAbsence) {
+            AbsenceEntity absence = AbsenceEntity.builder()
+                    .id(UUID.randomUUID())
+                    .userId(userId)
+                    .projectId(input.getProjectId())
+                    .date(today)
+                    .type("UNJUSTIFIED")
+                    .justified(false)
+                    .build();
+            absenceRepository.persist(absence);
+            System.out.println("[Attendance] ABSENCE auto-generated for OUTSIDE_SCHEDULE/EARLY check-in — userId="
+                    + userId + ", projectId=" + input.getProjectId() + ", date=" + today);
+        }
+    }
+
+    String outboxPhotoUrl = alertsPhotoUrl != null ? alertsPhotoUrl : photoUrl;
 
     outboxPublisher.publish(
             "Attendance",
@@ -145,12 +216,14 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
                     "{\"attendanceId\":\"%s\",\"userId\":\"%s\",\"photoUrl\":\"%s\"}",
                     entity.getId(),
                     userId,
-                    photoUrl != null ? photoUrl : ""
+                    outboxPhotoUrl != null ? outboxPhotoUrl : ""
             )
     );
 
     System.out.println("✅ [Audit Log] Attendance registration successful - userId: " + userId 
             + ", projectId: " + input.getProjectId() 
+            + ", status: " + attendanceStatus
+            + ", checkIn: " + entity.getCheckIn()
             + ", timestamp: " + timestamp 
             + ", attendanceId: " + entity.getId());
 
@@ -159,8 +232,8 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
         if (matchedProject != null) {
             System.out.println("📝 [Orchestrator] Match result: Project details retrieved successfully for projectId: " + input.getProjectId());
             
-            String dateStr = LocalDate.now().toString();
-            String checkInStr = LocalTime.now().toString();
+            String dateStr = today.toString();
+            String checkInStr = nowTime.toString();
             
             var alertPayload = new com.smms.assistance.infrastructure.client.AlertRequestPayload(
                 entity.getId(),
@@ -170,7 +243,7 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
                 checkInStr,
                 entity.getLatitude(),
                 entity.getLongitude(),
-                entity.getPhotoUrl(),
+                alertsPhotoUrl != null ? alertsPhotoUrl : entity.getPhotoUrl(),
                 matchedProject.getLatitude(),
                 matchedProject.getLongitude(),
                 matchedProject.getRadius(),
@@ -210,5 +283,66 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
     }
 
     return entity;
+}
+
+/**
+ * Classify attendance based on the project's configured schedule.
+ *
+ * Rules:
+ *   No schedule defined              → "CHECKED_IN" (legacy, no validation)
+ *   checkIn before workStartTime     → "EARLY"      (outside valid window)
+ *   checkIn after workEndTime        → "OUTSIDE_SCHEDULE" (past working hours)
+ *   checkIn in [workStart, workStart+grace] → "ON_TIME"
+ *   checkIn in (workStart+grace, workEnd]    → "LATE"
+ */
+private String classifyAttendance(ProjectOutput matchedProject, LocalTime checkIn) {
+    if (matchedProject == null || matchedProject.getWorkStartTime() == null) {
+        System.out.println("[Classification] No schedule defined for project. Defaulting to CHECKED_IN.");
+        return "CHECKED_IN";
+    }
+
+    try {
+        LocalTime workStart = LocalTime.parse(matchedProject.getWorkStartTime());
+        int grace = matchedProject.getGraceMinutes() != null ? matchedProject.getGraceMinutes() : 0;
+        LocalTime deadline = workStart.plusMinutes(grace);
+
+        LocalTime workEnd = null;
+        if (matchedProject.getWorkEndTime() != null && !matchedProject.getWorkEndTime().isBlank()) {
+            workEnd = LocalTime.parse(matchedProject.getWorkEndTime());
+        }
+
+        // Before schedule window
+        if (checkIn.isBefore(workStart)) {
+            System.out.println("[Classification] EARLY — checkIn=" + checkIn
+                    + ", workStart=" + workStart + ", workEnd=" + workEnd
+                    + ", graceMinutes=" + grace);
+            return "EARLY";
+        }
+
+        // After schedule window (if workEnd is defined)
+        if (workEnd != null && checkIn.isAfter(workEnd)) {
+            System.out.println("[Classification] OUTSIDE_SCHEDULE — checkIn=" + checkIn
+                    + ", workStart=" + workStart + ", workEnd=" + workEnd
+                    + ", graceMinutes=" + grace);
+            return "OUTSIDE_SCHEDULE";
+        }
+
+        // Within schedule window: classify on-time vs late
+        if (checkIn.equals(deadline) || checkIn.isBefore(deadline)) {
+            System.out.println("[Classification] ON_TIME — checkIn=" + checkIn
+                    + ", workStart=" + workStart + ", deadline=" + deadline
+                    + ", workEnd=" + workEnd + ", graceMinutes=" + grace);
+            return "ON_TIME";
+        } else {
+            System.out.println("[Classification] LATE — checkIn=" + checkIn
+                    + ", workStart=" + workStart + ", deadline=" + deadline
+                    + ", workEnd=" + workEnd + ", graceMinutes=" + grace);
+            return "LATE";
+        }
+    } catch (Exception e) {
+        System.out.println("[Classification] Error parsing schedule times: " + e.getMessage()
+                + ". Defaulting to CHECKED_IN.");
+        return "CHECKED_IN";
+    }
 }
 }

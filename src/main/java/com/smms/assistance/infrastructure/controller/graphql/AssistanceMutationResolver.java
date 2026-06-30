@@ -3,6 +3,11 @@ package com.smms.assistance.infrastructure.controller.graphql;
 import com.smms.assistance.application.in.JustifyAbsencePort;
 import com.smms.assistance.application.in.RegisterAttendancePort;
 import com.smms.assistance.application.in.SaveJustificationPort;
+import com.smms.assistance.application.in.EditJustificationPort;
+import com.smms.assistance.application.in.DeleteJustificationPort;
+import com.smms.assistance.application.in.SubmitJustificationPort;
+import com.smms.assistance.application.in.CheckOutPort;
+import com.smms.assistance.application.usecase.RequestObservationPMUseCase;
 
 import com.smms.assistance.infrastructure.controller.graphql.dto.*;
 import com.smms.assistance.infrastructure.security.AuthContext;
@@ -47,6 +52,21 @@ public class AssistanceMutationResolver {
     @Inject
     SaveJustificationPort saveJustificationPort;
 
+    @Inject
+    EditJustificationPort editJustificationPort;
+
+    @Inject
+    DeleteJustificationPort deleteJustificationPort;
+
+    @Inject
+    SubmitJustificationPort submitJustificationPort;
+
+    @Inject
+    RequestObservationPMUseCase requestObservationPMUseCase;
+
+    @Inject
+    CheckOutPort checkOutPort;
+
     // =========================
     // REGISTER ATTENDANCE
     // =========================
@@ -87,6 +107,19 @@ public RegisterAttendanceOutput registerAttendance(
         throw e;
     }
 }
+
+    // =========================
+    // CHECK-OUT (EXIT REGISTRATION)
+    // =========================
+    @Mutation("CheckOut")
+    @RolesAllowed("TEAM_MEMBER")
+    public RegisterAttendanceOutput checkOut(@Name("projectId") UUID projectId) {
+        UUID userId = authContext.getUserId();
+        LOG.infof("🚀 CheckOut START -> userId=%s projectId=%s", userId, projectId);
+
+        var result = checkOutPort.execute(userId, projectId);
+        return DtoMapper.toRegisterAttendanceOutput(result);
+    }
 
     // =========================
     // JUSTIFY ABSENCE
@@ -174,6 +207,102 @@ public RegisterAttendanceOutput registerAttendance(
         }
 
         LOG.info("====================================");
+    }
+
+    // =========================
+    // EDIT JUSTIFICATION
+    // =========================
+    @Mutation("EditJustification")
+    @RolesAllowed("TEAM_MEMBER")
+    public SaveJustificationOutput editJustification(
+            @Name("id") UUID id,
+            @Name("input") SaveJustificationInput input) {
+
+        logSecurity("EditJustification");
+
+        UUID userId = authContext.getUserId();
+
+        LOG.infof("🚀 EditJustification START -> userId=%s justificationId=%s", userId, id);
+
+        try {
+            var result = editJustificationPort.execute(userId, id, input);
+
+            SaveJustificationOutput output =
+                    DtoMapper.toSaveJustificationOutput(result);
+
+            LOG.info("✅ EDIT JUSTIFICATION SUCCESS");
+
+            return output;
+
+        } catch (Exception e) {
+            LOG.error("❌ EditJustification FAILED", e);
+            throw e;
+        }
+    }
+
+    // =========================
+    // DELETE JUSTIFICATION
+    // =========================
+    @Mutation("DeleteJustification")
+    @RolesAllowed("TEAM_MEMBER")
+    public Boolean deleteJustification(@Name("id") UUID id) {
+
+        logSecurity("DeleteJustification");
+
+        UUID userId = authContext.getUserId();
+
+        LOG.infof("🚀 DeleteJustification START -> userId=%s justificationId=%s", userId, id);
+
+        try {
+            deleteJustificationPort.execute(userId, id);
+
+            LOG.info("✅ DELETE JUSTIFICATION SUCCESS");
+
+            return true;
+
+        } catch (Exception e) {
+            LOG.error("❌ DeleteJustification FAILED", e);
+            throw e;
+        }
+    }
+
+    // =========================
+    // SUBMIT JUSTIFICATION (PENDING/OBSERVATION → SUBMITTED)
+    // =========================
+    @Mutation("SubmitJustification")
+    @RolesAllowed("TEAM_MEMBER")
+    public SaveJustificationOutput submitJustification(@Name("id") UUID id) {
+        UUID userId = authContext.getUserId();
+        LOG.infof("🚀 SubmitJustification START -> userId=%s justificationId=%s", userId, id);
+
+        try {
+            var result = submitJustificationPort.execute(userId, id);
+            SaveJustificationOutput output = DtoMapper.toSaveJustificationOutput(result);
+            LOG.info("✅ SUBMIT JUSTIFICATION SUCCESS");
+            return output;
+        } catch (Exception e) {
+            LOG.error("❌ SubmitJustification FAILED", e);
+            throw e;
+        }
+    }
+
+    // =========================
+    // REQUEST OBSERVATION PM (SUBMITTED → OBSERVATION)
+    // =========================
+    @Mutation("RequestObservationPM")
+    @RolesAllowed("PROJECT_MANAGER")
+    public JustificationOutput requestObservationPM(
+            @Name("justificationId") UUID justificationId,
+            @Name("comment") String comment,
+            @Name("reviewedBy") UUID reviewedBy
+    ) {
+        UUID currentPmId = authContext.getUserId();
+        System.out.println("[Assistance PM API] [Mutation] RequestObservationPM by PM: " + currentPmId
+                + " -> justificationId: " + justificationId);
+
+        var result = requestObservationPMUseCase.execute(justificationId, comment, reviewedBy);
+
+        return DtoMapper.toJustificationOutput(result);
     }
 
     // ==========================================

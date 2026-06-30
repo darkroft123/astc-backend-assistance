@@ -3,11 +3,26 @@ package com.smms.assistance.infrastructure.controller.graphql.dto;
 import com.smms.assistance.domain.entity.*;
 import com.smms.assistance.domain.model.*;
 
+import com.smms.assistance.shared.util.TimezoneService;
+
+import java.time.LocalDateTime;
 import java.util.List;
 
 public final class DtoMapper {
 
     private DtoMapper() {
+    }
+
+    /** Convert UTC-stored LocalDateTime to target timezone string for display */
+    public static String utcToZone(LocalDateTime utc, String targetZoneId) {
+        if (utc == null || targetZoneId == null) return null;
+        return TimezoneService.convertUtcToZone(utc, targetZoneId);
+    }
+
+    /** @deprecated Use utcToZone(utc, zoneId) instead */
+    @Deprecated
+    public static String utcToLima(LocalDateTime utc) {
+        return utcToZone(utc, "America/Lima");
     }
 
     public static AttendanceOutput toAttendanceOutput(AttendanceEntity e) {
@@ -45,7 +60,9 @@ public final class DtoMapper {
                 .documentUrl(e.getDocumentUrl())
                 .status(e.getStatus())
                 .comment(e.getComment())
-                .submittedAt(e.getSubmittedAt() != null ? e.getSubmittedAt().toString() : null)
+                .submittedAt(e.getSubmittedAt() != null ? utcToZone(e.getSubmittedAt(), TimezoneService.defaultTimezone()) : null)
+                .reviewedAt(e.getReviewedAt() != null ? utcToZone(e.getReviewedAt(), TimezoneService.defaultTimezone()) : null)
+                .reviewedBy(e.getReviewedBy())
                 .build();
     }
 
@@ -100,6 +117,7 @@ public final class DtoMapper {
                 .userId(entity.getUserId() != null ? entity.getUserId().toString() : null)
                 .date(entity.getDate() != null ? entity.getDate().toString() : null)
                 .checkIn(entity.getCheckIn() != null ? entity.getCheckIn().toString() : null)
+                .checkOut(entity.getCheckOut() != null ? entity.getCheckOut().toString() : null)
                 .status(entity.getStatus())
                 .build();
     }
@@ -111,7 +129,7 @@ public final class DtoMapper {
         return SaveJustificationOutput.builder()
                 .id(entity.getId() != null ? entity.getId().toString() : null)
                 .status(entity.getStatus())
-                .submittedAt(entity.getSubmittedAt() != null ? entity.getSubmittedAt().toString() : null)
+                .submittedAt(entity.getSubmittedAt() != null ? utcToZone(entity.getSubmittedAt(), TimezoneService.defaultTimezone()) : null)
                 .build();
     }
 }

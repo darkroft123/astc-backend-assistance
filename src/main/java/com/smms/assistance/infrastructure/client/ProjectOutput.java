@@ -11,6 +11,7 @@ public class ProjectOutput {
     public String workStartTime;
     public String workEndTime;
     public Integer graceMinutes;
+    public String timezone;
 
     public UUID getId() {
         return id;
@@ -74,5 +75,13 @@ public class ProjectOutput {
 
     public void setGraceMinutes(Integer graceMinutes) {
         this.graceMinutes = graceMinutes;
+    }
+
+    public String getTimezone() {
+        return timezone;
+    }
+
+    public void setTimezone(String timezone) {
+        this.timezone = timezone;
     }
 }

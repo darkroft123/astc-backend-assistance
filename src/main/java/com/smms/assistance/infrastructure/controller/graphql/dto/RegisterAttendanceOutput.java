@@ -18,5 +18,6 @@ public class RegisterAttendanceOutput {
     private String userId;
     private String date;
     private String checkIn;
+    private String checkOut;
     private String status;
 }

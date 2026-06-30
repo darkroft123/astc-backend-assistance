@@ -17,4 +17,5 @@ public class RegisterAttendanceInput {
     private Double latitude;
     private Double longitude;
     private String photoUrl;
+    private Boolean replace;
 }

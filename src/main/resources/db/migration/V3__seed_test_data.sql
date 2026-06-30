@@ -21,7 +21,7 @@ INSERT INTO attendances (
     'PRESENT',
     -12.0464,
     -77.0428,
-    'https://test.com/photo.jpg',
+    NULL,
     now(),
     now()
 );
@@ -64,7 +64,7 @@ INSERT INTO justifications (
     'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
     '00000000-0000-0000-0000-000000000002',
     'Justificación de prueba',
-    'https://test.com/doc.pdf',
+    NULL,
     'PENDING',
     NULL,
     now(),

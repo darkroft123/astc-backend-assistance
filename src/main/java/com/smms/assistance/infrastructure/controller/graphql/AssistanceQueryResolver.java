@@ -8,7 +8,9 @@ import com.smms.assistance.application.in.ListJustificationsPort;
 
 import com.smms.assistance.infrastructure.controller.graphql.dto.*;
 
+import com.smms.assistance.infrastructure.client.ProjectOutput;
 import com.smms.assistance.infrastructure.security.AuthContext;
+import com.smms.assistance.shared.util.TimezoneService;
 
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -20,10 +22,12 @@ import org.eclipse.microprofile.graphql.Query;
 
 import org.jboss.logging.Logger;
 
-import java.time.LocalDate;
-import java.util.UUID;
+import io.quarkus.panache.common.Sort;
 
+import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @GraphQLApi
 @ApplicationScoped
@@ -62,6 +66,9 @@ public class AssistanceQueryResolver {
 
     @Inject
     com.smms.assistance.infrastructure.client.ProjectManagerClientWrapper pmClientWrapper;
+
+    @Inject
+    com.smms.assistance.infrastructure.storage.S3StorageAdapter s3StorageAdapter;
 
     // =========================
     // GET MY PROJECTS
@@ -126,7 +133,7 @@ public class AssistanceQueryResolver {
 
         LOG.info("📌 USER ID: " + userId);
 
-        return DtoMapper.toAttendancePage(
+        AttendancePageOutput output = DtoMapper.toAttendancePage(
                 listAttendancePort.execute(
                         userId,
                         page,
@@ -135,6 +142,39 @@ public class AssistanceQueryResolver {
                         fromDate,
                         toDate,
                         status));
+
+        if (output.getItems() != null) {
+            for (AttendanceOutput item : output.getItems()) {
+                if (item.getPhotoUrl() != null && !item.getPhotoUrl().isBlank()) {
+                    item.setPhotoUrl(s3StorageAdapter.getPublicUrl(item.getPhotoUrl()));
+                }
+            }
+        }
+
+        return output;
+    }
+
+    // =========================
+    // GET TODAY'S ATTENDANCE
+    // =========================
+    @Query("GetTodayAttendance")
+    @RolesAllowed("TEAM_MEMBER")
+    public AttendanceOutput getTodayAttendance(@Name("projectId") UUID projectId) {
+        UUID userId = authContext.getUserId();
+        String timezone = resolveProjectTimezone(userId, projectId);
+        java.time.LocalDate today = TimezoneService.todayAtZone(timezone);
+
+        var existing = attendanceRepository
+                .find("userId = ?1 and projectId = ?2 and date = ?3", userId, projectId, today)
+                .firstResultOptional();
+
+        if (existing.isEmpty()) return null;
+
+        AttendanceOutput output = DtoMapper.toAttendanceOutput(existing.get());
+        if (output.getPhotoUrl() != null && !output.getPhotoUrl().isBlank()) {
+            output.setPhotoUrl(s3StorageAdapter.getPublicUrl(output.getPhotoUrl()));
+        }
+        return output;
     }
 
     // =========================
@@ -187,7 +227,7 @@ public class AssistanceQueryResolver {
 
         LOG.info("📌 USER ID: " + userId);
 
-        return DtoMapper.toJustificationPage(
+        JustificationPageOutput output = DtoMapper.toJustificationPage(
                 listJustificationsPort.execute(
                         userId,
                         page,
@@ -195,6 +235,16 @@ public class AssistanceQueryResolver {
                         status,
                         fromDate,
                         toDate));
+
+        if (output.getItems() != null) {
+            for (JustificationOutput item : output.getItems()) {
+                if (item.getDocumentUrl() != null && !item.getDocumentUrl().isBlank()) {
+                    item.setDocumentUrl(s3StorageAdapter.getPublicUrl(item.getDocumentUrl()));
+                }
+            }
+        }
+
+        return output;
     }
 
     // =========================
@@ -274,12 +324,24 @@ public class AssistanceQueryResolver {
                 attendanceRepository.findByUsers(userIds, projectId, from, to, status, page, size);
         long total = attendanceRepository.countByUsers(userIds, projectId, from, to, status);
 
-        System.out.println("[Assistance PM API] [Query] ListTeamAttendancePM matched " + items.size() + " records out of " + total + " total.");
-        System.out.println("[Assistance PM API] [Query] ListTeamAttendancePM resolved successfully and returning response page");
+        long photosCount = items.stream().filter(a -> a.getPhotoUrl() != null && !a.getPhotoUrl().isBlank()).count();
+        System.out.println("[Assistance PM API] [Query] ListTeamAttendancePM matched " + items.size() + " records out of " + total + " total. Photos: " + photosCount);
 
-        return DtoMapper.toAttendancePage(
+        AttendancePageOutput output = DtoMapper.toAttendancePage(
                 new com.smms.assistance.domain.model.Page<>(items, total, page, size)
         );
+
+        if (output.getItems() != null) {
+            for (AttendanceOutput item : output.getItems()) {
+                if (item.getPhotoUrl() != null && !item.getPhotoUrl().isBlank()) {
+                    item.setPhotoUrl(s3StorageAdapter.getPublicUrl(item.getPhotoUrl()));
+                }
+            }
+        }
+
+        System.out.println("[Assistance PM API] [Query] ListTeamAttendancePM resolved successfully and returning response page");
+
+        return output;
     }
 
     @Query("ListTeamJustificationsPM")
@@ -310,22 +372,68 @@ public class AssistanceQueryResolver {
 
         System.out.println("[Assistance PM API] [Query] ListTeamJustificationsPM matched " + items.size() + " justifications out of " + total + " total.");
 
-        return DtoMapper.toJustificationPage(
+        JustificationPageOutput output = DtoMapper.toJustificationPage(
                 new com.smms.assistance.domain.model.Page<>(items, total, page, size)
         );
+
+        if (output.getItems() != null) {
+            for (JustificationOutput item : output.getItems()) {
+                if (item.getDocumentUrl() != null && !item.getDocumentUrl().isBlank()) {
+                    item.setDocumentUrl(s3StorageAdapter.getPublicUrl(item.getDocumentUrl()));
+                }
+            }
+        }
+
+        return output;
     }
 
     @Query("GetJustificationDetailPM")
-    @RolesAllowed("PROJECT_MANAGER")
     public JustificationOutput getJustificationDetailPM(@Name("id") UUID id) {
-        UUID currentPmId = authContext.getUserId();
-        System.out.println("[Assistance PM API] [Query] GetJustificationDetailPM initiated by PM: " + currentPmId + " -> justificationId: " + id);
+        UUID currentUserId = authContext.getUserId();
+        String currentRole = authContext.getRole();
+        System.out.println("[Assistance PM API] [Query] GetJustificationDetailPM initiated by user: " + currentUserId + " (role: " + currentRole + ") -> justificationId: " + id);
 
         com.smms.assistance.domain.entity.JustificationEntity justification = justificationRepository.findByIdOptional(id)
                 .orElseThrow(() -> new IllegalArgumentException("Justification not found"));
 
+        if ("TEAM_MEMBER".equals(currentRole) && !justification.getUserId().equals(currentUserId)) {
+            throw new SecurityException("Access denied: justification does not belong to you");
+        }
+
         System.out.println("[Assistance PM API] [Query] GetJustificationDetailPM found justification. Status: " + justification.getStatus());
-        return DtoMapper.toJustificationOutput(justification);
+
+        JustificationOutput output = DtoMapper.toJustificationOutput(justification);
+        if (output.getDocumentUrl() != null && !output.getDocumentUrl().isBlank()) {
+            output.setDocumentUrl(s3StorageAdapter.getPublicUrl(output.getDocumentUrl()));
+        }
+
+        com.smms.assistance.domain.entity.AbsenceEntity absence = absenceRepository.findById(justification.getAbsenceId());
+        if (absence != null) {
+            output.setAbsenceDate(absence.getDate() != null ? absence.getDate().toString() : null);
+            output.setAbsenceType(absence.getType());
+        }
+
+        System.out.println("[Assistance PM API] [Query] GetJustificationDetailPM enriched with absence info -> absenceDate: " + output.getAbsenceDate() + ", absenceType: " + output.getAbsenceType());
+
+        var historyEntities = com.smms.assistance.domain.entity.JustificationHistoryEntity
+                .find("justificationId = ?1", Sort.by("changedAt").ascending(), id)
+                .<com.smms.assistance.domain.entity.JustificationHistoryEntity>list();
+
+        var historyOutputs = historyEntities.stream()
+                .map(h -> JustificationHistoryOutput.builder()
+                        .id(h.getId())
+                        .justificationId(h.getJustificationId())
+                        .previousStatus(h.getPreviousStatus())
+                        .newStatus(h.getNewStatus())
+                        .comment(h.getComment())
+                        .changedBy(h.getChangedBy())
+                        .changedAt(h.getChangedAt() != null ? DtoMapper.utcToLima(h.getChangedAt()) : null)
+                        .build())
+                .collect(Collectors.toList());
+
+        output.setHistory(historyOutputs);
+
+        return output;
     }
 
     @Query("GetDashboardPMInternal")
@@ -348,7 +456,7 @@ public class AssistanceQueryResolver {
 
         int totalAttendances = (int) attendanceRepository.countByUsers(userIds, projectId, from, to, null);
         int totalAbsences = (int) absenceRepository.countByUsers(userIds, projectId, from, to, null, null);
-        int pendingJustifications = (int) justificationRepository.countByUsers(userIds, "PENDING", from, to);
+        int pendingJustifications = (int) justificationRepository.countByUsers(userIds, "SUBMITTED", from, to);
 
         System.out.println("[Assistance PM API] [Query] GetDashboardPMInternal summary -> Attendances: " + totalAttendances 
                 + ", Absences: " + totalAbsences 
@@ -359,5 +467,22 @@ public class AssistanceQueryResolver {
                 .totalAbsences(totalAbsences)
                 .pendingJustifications(pendingJustifications)
                 .build();
+    }
+
+    private String resolveProjectTimezone(UUID userId, UUID projectId) {
+        try {
+            java.util.List<ProjectOutput> projects = pmClientWrapper.getMyProjects();
+            if (projects != null) {
+                for (ProjectOutput p : projects) {
+                    if (p.id != null && p.id.equals(projectId) && p.getTimezone() != null
+                            && TimezoneService.isValidTimezone(p.getTimezone())) {
+                        return p.getTimezone();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.out.println("[Query] Could not resolve project timezone, using default");
+        }
+        return TimezoneService.defaultTimezone();
     }
 }

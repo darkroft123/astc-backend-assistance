@@ -4,6 +4,7 @@ import io.smallrye.graphql.api.federation.FieldSet;
 import io.smallrye.graphql.api.federation.Key;
 import org.eclipse.microprofile.graphql.Type;
 import lombok.*;
+import java.util.List;
 import java.util.UUID;
 
 @Type
@@ -23,4 +24,9 @@ public class JustificationOutput {
     private String status;
     private String comment;
     private String submittedAt;
+    private String reviewedAt;
+    private UUID reviewedBy;
+    private String absenceDate;
+    private String absenceType;
+    private List<JustificationHistoryOutput> history;
 }

@@ -5,10 +5,14 @@ import lombok.*;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "attendances")
+@Table(name = "attendances", uniqueConstraints = {
+    @UniqueConstraint(name = "uq_attendance_user_project_date", columnNames = {"user_id", "project_id", "date"})
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -51,13 +55,13 @@ public class AttendanceEntity {
 
     @PrePersist
     public void prePersist() {
-        LocalDateTime now = LocalDateTime.now();
-        this.createdAt = now;
-        this.updatedAt = now;
+        LocalDateTime utcNow = Instant.now().atZone(ZoneOffset.UTC).toLocalDateTime();
+        this.createdAt = utcNow;
+        this.updatedAt = utcNow;
     }
 
     @PreUpdate
     public void preUpdate() {
-        this.updatedAt = LocalDateTime.now();
+        this.updatedAt = Instant.now().atZone(ZoneOffset.UTC).toLocalDateTime();
     }
 }

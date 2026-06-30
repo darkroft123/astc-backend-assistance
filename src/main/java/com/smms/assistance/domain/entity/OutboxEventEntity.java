@@ -2,7 +2,9 @@ package com.smms.assistance.domain.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 @Entity
@@ -29,6 +31,7 @@ public class OutboxEventEntity {
     private LocalDateTime createdAt;
 
     @Column(nullable = false)
+    @Builder.Default
     private Boolean published = false;
 
     @Column(name = "published_at")
@@ -36,6 +39,6 @@ public class OutboxEventEntity {
 
     @PrePersist
     public void prePersist() {
-        this.createdAt = LocalDateTime.now();
+        this.createdAt = Instant.now().atZone(ZoneOffset.UTC).toLocalDateTime();
     }
 }

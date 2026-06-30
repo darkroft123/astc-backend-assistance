@@ -182,6 +182,47 @@ export const resolvers = {
       return data.SaveJustification;
     },
 
+    async EditJustification(_, { id, input }, contextValue) {
+      const data = await callAssistance(
+        `mutation($id: UUID!, $input: SaveJustificationInput!) {
+          EditJustification(id: $id, input: $input) {
+            id
+            status
+            submittedAt
+          }
+        }`,
+        { id, input },
+        contextValue.token
+      );
+      return data.EditJustification;
+    },
+
+    async DeleteJustification(_, { id }, contextValue) {
+      const data = await callAssistance(
+        `mutation($id: UUID!) {
+          DeleteJustification(id: $id)
+        }`,
+        { id },
+        contextValue.token
+      );
+      return data.DeleteJustification;
+    },
+
+    async SubmitJustification(_, { id }, contextValue) {
+      const data = await callAssistance(
+        `mutation($id: UUID!) {
+          SubmitJustification(id: $id) {
+            id
+            status
+            submittedAt
+          }
+        }`,
+        { id },
+        contextValue.token
+      );
+      return data.SubmitJustification;
+    },
+
     async JustifyAbsence(_, { input }, contextValue) {
       const data = await callAssistance(
         `mutation($input: JustifyAbsenceInput!) {

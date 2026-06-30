@@ -15,4 +15,5 @@ public class SaveJustificationInput {
     private UUID absenceId;
     private String description;
     private String documentUrl;
+    private String fileBase64;
 }

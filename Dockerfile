@@ -33,6 +33,7 @@ COPY --from=builder /build/target/*-runner.jar app.jar
 
 EXPOSE 8082
 
-ENV JAVA_OPTS="-Djava.util.logging.manager=org.jboss.logmanager.LogManager"
+ENV TZ=UTC
+ENV JAVA_OPTS="-Duser.timezone=UTC -Djava.util.logging.manager=org.jboss.logmanager.LogManager"
 
 CMD ["java", "-jar", "app.jar"]

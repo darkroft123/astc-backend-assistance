@@ -23,15 +23,15 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
             params.put("status", status);
         }
         if (from != null) {
-            query.append(" and submittedAt >= :from");
+            query.append(" and COALESCE(submittedAt, createdAt) >= :from");
             params.put("from", from.atStartOfDay());
         }
         if (to != null) {
-            query.append(" and submittedAt <= :to");
+            query.append(" and COALESCE(submittedAt, createdAt) <= :to");
             params.put("to", to.plusDays(1).atStartOfDay());
         }
 
-        return find(query.toString(), Sort.by("submittedAt").descending(), params)
+        return find(query.toString(), Sort.by("createdAt").descending(), params)
                 .page(Page.of(page, size))
                 .list();
     }
@@ -46,11 +46,11 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
             params.put("status", status);
         }
         if (from != null) {
-            query.append(" and submittedAt >= :from");
+            query.append(" and COALESCE(submittedAt, createdAt) >= :from");
             params.put("from", from.atStartOfDay());
         }
         if (to != null) {
-            query.append(" and submittedAt <= :to");
+            query.append(" and COALESCE(submittedAt, createdAt) <= :to");
             params.put("to", to.plusDays(1).atStartOfDay());
         }
 
@@ -97,15 +97,15 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
             params.put("status", status);
         }
         if (from != null) {
-            query.append(" and submittedAt >= :from");
+            query.append(" and COALESCE(submittedAt, createdAt) >= :from");
             params.put("from", from.atStartOfDay());
         }
         if (to != null) {
-            query.append(" and submittedAt <= :to");
+            query.append(" and COALESCE(submittedAt, createdAt) <= :to");
             params.put("to", to.plusDays(1).atStartOfDay());
         }
 
-        List<JustificationEntity> result = find(query.toString(), Sort.by("submittedAt").descending(), params)
+        List<JustificationEntity> result = find(query.toString(), Sort.by("createdAt").descending(), params)
                 .page(Page.of(page, size))
                 .list();
 
@@ -136,11 +136,11 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
             params.put("status", status);
         }
         if (from != null) {
-            query.append(" and submittedAt >= :from");
+            query.append(" and COALESCE(submittedAt, createdAt) >= :from");
             params.put("from", from.atStartOfDay());
         }
         if (to != null) {
-            query.append(" and submittedAt <= :to");
+            query.append(" and COALESCE(submittedAt, createdAt) <= :to");
             params.put("to", to.plusDays(1).atStartOfDay());
         }
 
