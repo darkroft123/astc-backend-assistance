@@ -6,12 +6,15 @@ import com.smms.assistance.infrastructure.messaging.OutboxEventPublisher;
 import com.smms.assistance.infrastructure.repository.AbsenceRepository;
 import com.smms.assistance.infrastructure.repository.JustificationRepository;
 import jakarta.enterprise.context.ApplicationScoped;
+import org.jboss.logging.Logger;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import java.util.UUID;
 
 @ApplicationScoped
 public class JustifyAbsenceUseCase implements JustifyAbsencePort {
+
+    private static final Logger LOG = Logger.getLogger(JustifyAbsenceUseCase.class);
 
     @Inject AbsenceRepository absenceRepository;
     @Inject JustificationRepository justificationRepository;
@@ -34,9 +37,8 @@ public class JustifyAbsenceUseCase implements JustifyAbsencePort {
         absence.setJustified(true);
         absenceRepository.persist(absence);
 
-        // outboxPublisher.publish("Absence", absenceId,
-        //         "absence_justified",
-        //         "{\"absenceId\":\"" + absenceId + "\",\"userId\":\"" + userId + "\"}");
+        LOG.infof("[NOTIFICATION] JustifyAbsenceUseCase executed for absenceId=%s, userId=%s — outbox event DISABLED (commented out)",
+                absenceId, userId);
 
         return absence;
 }

@@ -5,14 +5,14 @@ import com.smms.assistance.infrastructure.repository.OutboxRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import org.jboss.logging.Logger;
+
 import java.util.UUID;
 
-/**
- * Writes domain events to the outbox table within the same transaction.
- * A separate scheduler/poller will read and publish them to RabbitMQ.
- */
 @ApplicationScoped
 public class OutboxEventPublisher {
+
+    private static final Logger LOG = Logger.getLogger(OutboxEventPublisher.class);
 
     @Inject
     OutboxRepository outboxRepository;
@@ -28,5 +28,7 @@ public class OutboxEventPublisher {
                 .published(false)
                 .build();
         outboxRepository.persist(event);
+        LOG.infof("[OUTBOX] Event persisted: id=%s, type=%s, aggregateType=%s, aggregateId=%s",
+                event.getId(), eventType, aggregateType, aggregateId);
     }
 }

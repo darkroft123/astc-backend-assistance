@@ -14,7 +14,7 @@ public interface ProjectManagerClient {
     @Query("GetMyProjects")
     List<ProjectOutput> getMyProjects();
 
-    @Mutation
+    @Mutation("CreateAlert")
     void createAlert(
             @Name("userId") UUID userId,
             @Name("projectId") UUID projectId,

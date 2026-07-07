@@ -12,6 +12,7 @@ import com.smms.assistance.infrastructure.storage.S3StorageAdapter;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import org.jboss.logging.Logger;
 import java.io.ByteArrayInputStream;
 import java.time.LocalDateTime;
 import java.util.Base64;
@@ -20,10 +21,13 @@ import java.util.UUID;
 @ApplicationScoped
 public class SaveJustificationUseCase implements SaveJustificationPort {
 
+    private static final Logger LOG = Logger.getLogger(SaveJustificationUseCase.class);
+
     @Inject JustificationRepository justificationRepository;
     @Inject AbsenceRepository absenceRepository;
     @Inject OutboxEventPublisher outboxPublisher;
     @Inject S3StorageAdapter s3StorageAdapter;
+    @Inject org.eclipse.microprofile.jwt.JsonWebToken jwt;
 
     @Override
     @Transactional
@@ -44,16 +48,32 @@ public class SaveJustificationUseCase implements SaveJustificationPort {
 
         if (input.getFileBase64() != null && !input.getFileBase64().isBlank()) {
             try {
-                String raw = input.getFileBase64();
+                String rawBase64 = input.getFileBase64();
+                String raw = rawBase64;
                 if (raw.contains(",")) {
                     raw = raw.substring(raw.indexOf(",") + 1);
                 }
                 byte[] decoded = Base64.getDecoder().decode(raw);
+                String mimeType = "application/octet-stream";
+                String fileExt = ".pdf";
+                if (rawBase64.startsWith("data:")) {
+                    int mimeEnd = rawBase64.indexOf(";");
+                    if (mimeEnd > 5) {
+                        mimeType = rawBase64.substring(5, mimeEnd);
+                    }
+                    if (mimeType.startsWith("image/")) {
+                        String ext = mimeType.substring(6);
+                        if ("jpeg".equals(ext)) ext = "jpg";
+                        fileExt = "." + ext;
+                    } else if (mimeType.equals("application/pdf")) {
+                        fileExt = ".pdf";
+                    }
+                }
                 String fileUuid = UUID.randomUUID().toString();
                 String folder = "document/private/user/" + userId + "/justifications";
-                String filename = fileUuid + ".pdf";
+                String filename = fileUuid + fileExt;
                 String key = s3StorageAdapter.upload(folder, filename,
-                        new ByteArrayInputStream(decoded), decoded.length, "application/octet-stream");
+                        new ByteArrayInputStream(decoded), decoded.length, mimeType);
                 documentUrl = key;
             } catch (Exception e) {
                 throw new RuntimeException("Failed to upload file to MinIO", e);
@@ -75,11 +95,32 @@ public class SaveJustificationUseCase implements SaveJustificationPort {
 
         recordHistory(justificationId, null, "PENDING", "Justification created", userId);
 
+        String userEmail = jwt != null ? jwt.getClaim("email") : null;
+        String userName = jwt != null ? jwt.getClaim("name") : null;
+        if (userEmail == null || userEmail.isBlank()) {
+            userEmail = "";
+        }
+        if (userName == null || userName.isBlank()) {
+            userName = userEmail.contains("@") ? userEmail.split("@")[0] : "Colaborador";
+        }
+        userEmail = userEmail.replace("\"", "\\\"");
+        userName = userName.replace("\"", "\\\"");
+
+        LOG.infof("[OUTBOX] Publishing justification event: justificationId=%s, absenceId=%s, userId=%s",
+                entity.getId(), input.getAbsenceId(), userId);
         outboxPublisher.publish("Justification", entity.getId(),
                 "SendNotificationByQueue",
-                "{\"justificationId\":\"" + entity.getId() + "\",\"absenceId\":\"" + input.getAbsenceId() + "\",\"userId\":\"" + userId + "\"}");
+                String.format(
+                        "{\"justificationId\":\"%s\",\"absenceId\":\"%s\",\"userId\":\"%s\",\"userEmail\":\"%s\",\"userName\":\"%s\"}",
+                        entity.getId(),
+                        input.getAbsenceId(),
+                        userId,
+                        userEmail,
+                        userName
+                )
+        );
 
-        System.out.println("[Justification Flow] CREATED -> ID: " + justificationId + ", Status: PENDING");
+        LOG.infof("[Justification Flow] CREATED -> ID: %s, Status: PENDING", justificationId);
         return entity;
     }
 

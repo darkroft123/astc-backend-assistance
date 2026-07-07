@@ -10,6 +10,7 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
@@ -75,6 +76,9 @@ public class S3StorageAdapter {
                     .endpointOverride(URI.create(effectivePublicEndpoint))
                     .region(Region.of(region))
                     .credentialsProvider(credentials)
+                    .serviceConfiguration(S3Configuration.builder()
+                            .pathStyleAccessEnabled(true)
+                            .build())
                     .build();
 
             log.info("S3 client initialized (internal endpoint). Presigner initialized (public endpoint)");

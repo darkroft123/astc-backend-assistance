@@ -47,6 +47,9 @@ public class AttendanceEntity {
     @Column(name = "photo_url", length = 500)
     private String photoUrl;
 
+    @Column(name = "project_timezone", length = 50)
+    private String projectTimezone;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

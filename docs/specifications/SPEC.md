@@ -63,18 +63,29 @@ Este microservicio es responsable de:
 --------------------------------------------------------------------------------
 MUTACIONES
 --------------------------------------------------------------------------------
-- RegisterAttendance (Registrar asistencia)
-- JustifyAbsence (Justificar ausencia)
-- SaveJustification (Guardar justificación)
+- RegisterAttendance  (Registrar entrada de asistencia con foto + GPS)
+- CheckOut            (Registrar salida de asistencia)
+- SaveJustification   (Guardar justificación como borrador PENDING)
+- SubmitJustification (Enviar justificación a revisión → SUBMITTED)
+- EditJustification   (Editar justificación en estado PENDING u OBSERVATION)
+- DeleteJustification (Eliminar justificación en estado PENDING)
+- JustifyAbsence      (Validar si una ausencia puede ser justificada)
+- ApproveJustification (PM aprueba justificación → APPROVED)
+- RejectJustification  (PM rechaza justificación → REJECTED)
+- RequestObservation   (PM solicita correcciones → OBSERVATION)
 
 --------------------------------------------------------------------------------
 CONSULTAS
 --------------------------------------------------------------------------------
-- GetDashboard (Obtener dashboard)
-- ListAttendance (Listar asistencias)
-- ListAbsences (Listar ausencias)
-- ListJustifications (Listar justificaciones)
-- GetJustificationStatus (Estado de justificación)
+- GetDashboard            (Dashboard team member: totalAttendances, totalAbsences, pendingJustifications)
+- GetDashboardPMInternal  (Dashboard interno para PM)
+- ListAttendance          (Historial de asistencias del usuario)
+- ListAbsences            (Lista de ausencias del usuario)
+- ListJustifications      (Lista de justificaciones del usuario)
+- GetJustificationDetailPM (Detalle completo con history[])
+- GetJustificationStatus  (Estado de una justificación)
+- GetTodayAttendance      (Asistencia del día actual: checkIn, checkOut, status)
+- ListTeamJustificationsPM (Justificaciones del equipo para PM)
 
 --------------------------------------------------------------------------------
 
@@ -141,28 +152,38 @@ TABLAS PRINCIPALES
 3. justifications (justificaciones)
 --------------------------------------------------------------------------------
 - id (UUID)
-- absence_id (UUID)
+- absence_id (UUID → absences.id)
 - user_id (UUID externo)
 - description (texto)
-- document_url (archivo adjunto)
-- status (PENDING | APPROVED | REJECTED)
+- document_url (S3 key en MinIO, ej: document/private/user/{uuid}/justifications/{uuid}.pdf)
+- status (PENDING | SUBMITTED | OBSERVATION | APPROVED | REJECTED)
 - comment (comentario del revisor)
-- submitted_at (fecha envío)
-- reviewed_at (fecha revisión)
-- reviewed_by (UUID del revisor)
+- submitted_at (fecha envío a revisión)
+- reviewed_at (fecha revisión por PM)
+- reviewed_by (UUID del PM revisor)
+- created_at / updated_at
 
+4. justification_history (historial de cambios)
 --------------------------------------------------------------------------------
+- id (UUID)
+- justification_id (UUID → justifications.id)
+- previous_status (estado anterior, null si es creación)
+- new_status (nuevo estado)
+- comment (comentario del cambio)
+- changed_by (UUID del usuario que ejecutó el cambio)
+- changed_at (timestamp del cambio)
 
-4. alerts (alertas del sistema)
+5. alerts (alertas del sistema)
 --------------------------------------------------------------------------------
 - id (UUID)
 - user_id (UUID externo)
 - project_id (UUID externo)
 - type (tipo de alerta)
-    - FRAUDE_FACIAL
-    - ASISTENCIA_TARDÍA
-    - UBICACIÓN_ANÓMALA
-- status (PENDING | RESOLVED)
+    - FACE_FRAUD
+    - FACE_MISMATCH
+    - OUT_OF_AREA
+    - LATE_ARRIVAL
+- status (PENDING | APPROVED | CANCELLED)
 - detail (detalle del evento)
 - latitude / longitude
 - created_at / updated_at
@@ -177,12 +198,15 @@ Exchange:
 
 Eventos publicados:
 
-- attendance.registered
-- absence.created
-- justification.submitted
-- justification.approved
-- justification.rejected
-- alert.created
+- attendance.registered    (cuando se registra check-in)
+- attendance.checked_out   (cuando se registra check-out)
+- absence.created          (cuando se detecta una falta automáticamente)
+- justification.saved      (borrador guardado, status PENDING)
+- justification.submitted  (enviado a revisión, status SUBMITTED)
+- justification.approved   (aprobado por PM)
+- justification.rejected   (rechazado por PM)
+- justification.observation (PM solicita correcciones)
+- alert.created            (nueva alerta generada)
 
 Objetivo:
 - Integración con sistemas externos
@@ -195,12 +219,20 @@ Objetivo:
 🧠 REGLAS DE NEGOCIO
 --------------------------------------------------------------------------------
 
-1. Un usuario solo puede registrar su propia asistencia
-2. Solo puede existir una justificación activa por ausencia
-3. El rol TEAM_MEMBER es obligatorio para operar en el sistema
-4. Toda asistencia fuera de horario o ubicación genera alerta
-5. El sistema de IA valida rostro antes de aceptar asistencia
-6. Toda anomalía debe generar un evento de alerta automáticamente
+1. Un usuario solo puede registrar su propia asistencia (userId del JWT)
+2. Solo puede existir UNA asistencia por usuario por día (unique constraint: user_id + date)
+3. El check-out requiere que exista un check-in previo en el mismo día
+4. Si se intenta registrar entrada de nuevo → error "Ya registraste" con opción de reemplazar
+5. Solo puede existir una justificación activa por ausencia
+6. El rol TEAM_MEMBER es obligatorio para operar en el sistema
+7. Toda asistencia fuera de horario o ubicación genera alerta automática
+8. El sistema de IA valida rostro antes de aceptar asistencia
+9. Las justificaciones requieren 2 pasos: save (PENDING) + submit (SUBMITTED)
+10. Solo el PM puede aprobar/rechazar/solicitar observación (rol PROJECT_MANAGER o ADMIN)
+11. El historial de justificación (justification_history) es inmutable
+12. Las URLs de documentos son presigned (expiran en 60 min) generadas por S3Presigner
+13. El presigner usa path-style (no virtual-host) para compatibilidad con MinIO
+14. Si una URL ya es externa (http/https) y no es del bucket → se retorna tal cual (sin re-firmar)
 
 --------------------------------------------------------------------------------
 
@@ -208,12 +240,22 @@ Objetivo:
 --------------------------------------------------------------------------------
 
 Bucket:
-- assistance-storage
+- assistance
 
-Uso:
-- Fotos de asistencia
-- Evidencias de justificación
-- Resultados del análisis de IA
+Configuración:
+- S3_ENDPOINT: http://minio:9000 (interno Docker)
+- S3_PUBLIC_ENDPOINT: http://localhost:9010 (público para presigned URLs)
+- Credenciales: minioadmin / minioadmin
+- Región: us-east-1
+
+Estructura de keys:
+- Foto de asistencia: private/user/{userId}/assistance/{yyyy/MM}/{uuid}.jpg
+- Documento de justificación: document/private/user/{userId}/justifications/{uuid}.pdf
+
+Presigned URLs:
+- Generadas con S3Presigner.pathStyleAccessEnabled(true)
+- Expiración: 60 minutos
+- Formato: http://localhost:9010/assistance/{key}?X-Amz-...
 
 --------------------------------------------------------------------------------
 

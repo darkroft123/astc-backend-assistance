@@ -32,8 +32,29 @@ public class GenerateAbsenceIfNeededUseCase {
     @Inject
     AttendanceRepository attendanceRepository;
 
+    @Inject
+    com.smms.assistance.infrastructure.client.ProjectManagerClientWrapper projectManagerClientWrapper;
+
     @Transactional
     public void execute(UUID userId) {
+        execute(userId, null);
+    }
+
+    @Transactional
+    public void execute(UUID userId, UUID projectId) {
+        // Evitar generar faltas a usuarios que no tienen proyectos asignados en el sistema
+        try {
+            java.util.List<com.smms.assistance.infrastructure.client.ProjectOutput> myProjects = 
+                    projectManagerClientWrapper.getMyProjects();
+            if (myProjects == null || myProjects.isEmpty()) {
+                System.out.println("[AbsenceGen] User has no projects assigned. Skipping absence generation. userId=" + userId);
+                return;
+            }
+        } catch (Exception e) {
+            System.out.println("[AbsenceGen] Failed to fetch projects for user, skipping absence generation: " + e.getMessage());
+            return;
+        }
+
         String tz = TimezoneService.isValidTimezone(defaultTimezone) ? defaultTimezone : TimezoneService.defaultTimezone();
         ZonedDateTime nowInZone = TimezoneService.zonedNow(tz);
         LocalDate today = nowInZone.toLocalDate();
@@ -51,10 +72,18 @@ public class GenerateAbsenceIfNeededUseCase {
                 .firstResultOptional()
                 .isPresent();
 
-        boolean hasAbsence = absenceRepository
-                .find("userId = ?1 and date = ?2", userId, today)
-                .firstResultOptional()
-                .isPresent();
+        boolean hasAbsence;
+        if (projectId != null) {
+            hasAbsence = absenceRepository
+                    .find("userId = ?1 and projectId = ?2 and date = ?3", userId, projectId, today)
+                    .firstResultOptional()
+                    .isPresent();
+        } else {
+            hasAbsence = absenceRepository
+                    .find("userId = ?1 and date = ?2", userId, today)
+                    .firstResultOptional()
+                    .isPresent();
+        }
 
         if (hasAttendance || hasAbsence) {
             System.out.println("[AbsenceGen] User already has attendance or absence for today. Skipping. userId=" + userId);
@@ -64,15 +93,15 @@ public class GenerateAbsenceIfNeededUseCase {
         AbsenceEntity absence = AbsenceEntity.builder()
                 .id(UUID.randomUUID())
                 .userId(userId)
-                .projectId(null)
+                .projectId(projectId)
                 .date(today)
-                .type("UNJUSTIFIED")
+                .type("FALTA_AUTOMATICA")
                 .justified(false)
                 .build();
 
         absenceRepository.persist(absence);
 
         System.out.println("[AbsenceGen] ABSENCE generated for userId=" + userId
-                + ", date=" + today + ", cutoff=" + cutoff + ". No attendance found.");
+                + ", projectId=" + projectId + ", date=" + today + ", cutoff=" + cutoff + ". No attendance found.");
     }
 }
