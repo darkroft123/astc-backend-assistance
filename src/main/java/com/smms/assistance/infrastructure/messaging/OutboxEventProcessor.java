@@ -47,6 +47,9 @@ public class OutboxEventProcessor {
     @Channel("notification-events")
     Emitter<String> notificationEmitter;
 
+    @Inject
+    com.smms.assistance.infrastructure.client.AuthClient authClient;
+
     @ConfigProperty(name = "event.notification.template.attendance_registered", defaultValue = "AST00001")
     String attendanceTemplateCode;
 
@@ -143,6 +146,23 @@ public class OutboxEventProcessor {
         }
     }
 
+    private void enrichUserDetails(JsonObject payload, String userId) {
+        String toEmail = payload.getString("userEmail", "");
+        if (toEmail == null || toEmail.isBlank()) {
+            if (userId != null && !userId.isBlank()) {
+                try {
+                    com.smms.assistance.infrastructure.client.UserOutput user = authClient.getUser(userId);
+                    if (user != null) {
+                        payload.put("userEmail", user.email);
+                        payload.put("userName", user.username);
+                    }
+                } catch (Exception e) {
+                    LOG.warnf("Could not fetch user details from auth-service for userId=%s: %s", userId, e.getMessage());
+                }
+            }
+        }
+    }
+
     private JsonObject mapToNotification(OutboxEventEntity event) {
         JsonObject payload = new JsonObject(event.getPayload());
         String userId = payload.getString("userId");
@@ -151,6 +171,8 @@ public class OutboxEventProcessor {
             LOG.warnf("Skipping outbox event %s: missing userId in payload", event.getId());
             return null;
         }
+
+        enrichUserDetails(payload, userId);
 
         switch (event.getEventType()) {
             case "attendance_registered":

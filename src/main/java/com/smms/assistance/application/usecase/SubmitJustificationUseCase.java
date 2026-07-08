@@ -3,6 +3,7 @@ package com.smms.assistance.application.usecase;
 import com.smms.assistance.application.in.SubmitJustificationPort;
 import com.smms.assistance.domain.entity.JustificationEntity;
 import com.smms.assistance.domain.entity.JustificationHistoryEntity;
+import com.smms.assistance.infrastructure.messaging.OutboxEventPublisher;
 import com.smms.assistance.infrastructure.repository.JustificationRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -16,6 +17,12 @@ public class SubmitJustificationUseCase implements SubmitJustificationPort {
 
     @Inject
     JustificationRepository justificationRepository;
+
+    @Inject
+    OutboxEventPublisher outboxPublisher;
+
+    @Inject
+    org.eclipse.microprofile.jwt.JsonWebToken jwt;
 
     @Override
     @Transactional
@@ -38,6 +45,31 @@ public class SubmitJustificationUseCase implements SubmitJustificationPort {
         justificationRepository.persist(entity);
 
         recordHistory(justificationId, previousStatus, "SUBMITTED", null, userId);
+
+        String userEmail = jwt != null ? jwt.getClaim("email") : null;
+        String userName = jwt != null ? jwt.getClaim("name") : null;
+        if (userEmail == null || userEmail.isBlank()) {
+            userEmail = "";
+        }
+        if (userName == null || userName.isBlank()) {
+            userName = userEmail.contains("@") ? userEmail.split("@")[0] : "Colaborador";
+        }
+        userEmail = userEmail.replace("\"", "\\\"");
+        userName = userName.replace("\"", "\\\"");
+
+        String eventType = "OBSERVATION".equals(previousStatus) ? "justification_resubmitted" : "justification_submitted";
+
+        outboxPublisher.publish("Justification", entity.getId(),
+                eventType,
+                String.format(
+                        "{\"justificationId\":\"%s\",\"absenceId\":\"%s\",\"userId\":\"%s\",\"userEmail\":\"%s\",\"userName\":\"%s\"}",
+                        entity.getId(),
+                        entity.getAbsenceId(),
+                        userId,
+                        userEmail,
+                        userName
+                )
+        );
 
         System.out.println("[Justification Flow] SUBMITTED -> " + previousStatus + " -> SUBMITTED -> ID: " + justificationId);
         return entity;

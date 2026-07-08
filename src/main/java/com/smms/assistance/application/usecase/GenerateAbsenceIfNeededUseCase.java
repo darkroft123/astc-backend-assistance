@@ -35,6 +35,9 @@ public class GenerateAbsenceIfNeededUseCase {
     @Inject
     com.smms.assistance.infrastructure.client.ProjectManagerClientWrapper projectManagerClientWrapper;
 
+    @Inject
+    com.smms.assistance.infrastructure.messaging.OutboxEventPublisher outboxPublisher;
+
     @Transactional
     public void execute(UUID userId) {
         execute(userId, null);
@@ -103,5 +106,20 @@ public class GenerateAbsenceIfNeededUseCase {
 
         System.out.println("[AbsenceGen] ABSENCE generated for userId=" + userId
                 + ", projectId=" + projectId + ", date=" + today + ", cutoff=" + cutoff + ". No attendance found.");
+
+        try {
+            outboxPublisher.publish(
+                    "Absence",
+                    absence.getId(),
+                    "absence_no_record",
+                    String.format(
+                            "{\"absenceId\":\"%s\",\"userId\":\"%s\",\"userEmail\":\"\",\"userName\":\"\"}",
+                            absence.getId(),
+                            userId
+                    )
+            );
+        } catch (Exception e) {
+            System.out.println("[AbsenceGen] Error publishing outbox event: " + e.getMessage());
+        }
     }
 }

@@ -23,7 +23,13 @@ public class CheckOutUseCase implements CheckOutPort {
     AttendanceRepository attendanceRepository;
 
     @Inject
-    ProjectManagerClientWrapper pmClientWrapper;
+    com.smms.assistance.infrastructure.messaging.OutboxEventPublisher outboxPublisher;
+
+    @Inject
+    org.eclipse.microprofile.jwt.JsonWebToken jwt;
+
+    @Inject
+    com.smms.assistance.infrastructure.client.ProjectManagerClientWrapper pmClientWrapper;
 
     @Override
     @Transactional
@@ -59,6 +65,36 @@ public class CheckOutUseCase implements CheckOutPort {
                 + ", entry=" + entity.getCheckIn()
                 + ", exit=" + entity.getCheckOut()
                 + ", status=" + entity.getStatus());
+
+        try {
+            String userEmail = jwt != null ? jwt.getClaim("email") : null;
+            String userName = jwt != null ? jwt.getClaim("name") : null;
+            if (userEmail == null || userEmail.isBlank()) {
+                userEmail = "";
+            }
+            if (userName == null || userName.isBlank()) {
+                userName = userEmail.contains("@") ? userEmail.split("@")[0] : "Colaborador";
+            }
+            userEmail = userEmail.replace("\"", "\\\"");
+            userName = userName.replace("\"", "\\\"");
+
+            String eventType = "EARLY_DEPARTURE".equals(departureStatus) ? "checkout_early" : "checkout_registered";
+
+            outboxPublisher.publish(
+                    "Attendance",
+                    entity.getId(),
+                    eventType,
+                    String.format(
+                            "{\"attendanceId\":\"%s\",\"userId\":\"%s\",\"userEmail\":\"%s\",\"userName\":\"%s\"}",
+                            entity.getId(),
+                            userId,
+                            userEmail,
+                            userName
+                    )
+            );
+        } catch (Exception e) {
+            System.out.println("[CheckOut] Error publishing outbox event: " + e.getMessage());
+        }
 
         return entity;
     }
