@@ -29,7 +29,7 @@ public class GetDashboardUseCase implements GetDashboardPort {
     @Override
     public DashboardSummary execute(UUID userId, LocalDate fromDate, LocalDate toDate) {
 
-        generateAbsenceIfNeededUseCase.execute(userId);
+        // generateAbsenceIfNeededUseCase.execute(userId); // Desactivado para evitar generar falta en el primer login
 
         return DashboardSummary.builder()
                 .totalAttendances((int) attendanceRepository.countByUser(

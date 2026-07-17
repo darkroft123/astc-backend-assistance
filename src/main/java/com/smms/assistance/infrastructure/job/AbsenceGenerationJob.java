@@ -5,6 +5,7 @@ import com.smms.assistance.domain.entity.AttendanceEntity;
 import com.smms.assistance.infrastructure.repository.AbsenceRepository;
 import com.smms.assistance.infrastructure.repository.AttendanceRepository;
 import com.smms.assistance.shared.util.TimezoneService;
+import com.smms.assistance.infrastructure.client.ProjectManagerClientWrapper;
 import io.quarkus.scheduler.Scheduled;
 import io.quarkus.scheduler.ScheduledExecution;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -33,6 +34,9 @@ public class AbsenceGenerationJob {
 
     @ConfigProperty(name = "app.absence.job.cutoff-minute", defaultValue = "30")
     int cutoffMinute;
+
+    @Inject
+    ProjectManagerClientWrapper pmClientWrapper;
 
     @ConfigProperty(name = "app.absence.job.default-timezone", defaultValue = "America/Lima")
     String defaultTimezone;
@@ -106,6 +110,29 @@ public class AbsenceGenerationJob {
 
             if (existingAbsence > 0) {
                 continue;
+            }
+
+            // Check if today is a holiday for this project
+            if (projectId != null) {
+                try {
+                    if (pmClientWrapper.isHoliday(projectId, today)) {
+                        LOG.infof("[AbsenceJob] Today %s is a holiday for project %s, skipping user %s", today, projectId, userId);
+                        continue;
+                    }
+                } catch (Exception e) {
+                    LOG.warnf("[AbsenceJob] Failed to check holiday for project %s: %s", projectId, e.getMessage());
+                }
+            }
+
+            // Check if user has approved vacation for today
+            try {
+                boolean onVacation = pmClientWrapper.hasApprovedVacation(userId, today);
+                if (onVacation) {
+                    LOG.infof("[AbsenceJob] User %s has approved vacation on %s, skipping absence", userId, today);
+                    continue;
+                }
+            } catch (Exception e) {
+                LOG.warnf("[AbsenceJob] Failed to check vacation for user %s: %s", userId, e.getMessage());
             }
 
             AbsenceEntity absence = AbsenceEntity.builder()

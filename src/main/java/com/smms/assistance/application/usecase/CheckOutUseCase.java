@@ -5,6 +5,7 @@ import com.smms.assistance.domain.entity.AttendanceEntity;
 import com.smms.assistance.infrastructure.repository.AttendanceRepository;
 import com.smms.assistance.infrastructure.client.ProjectManagerClientWrapper;
 import com.smms.assistance.infrastructure.client.ProjectOutput;
+import com.smms.assistance.infrastructure.client.EffectiveScheduleOutput;
 import com.smms.assistance.shared.util.TimezoneService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -55,7 +56,7 @@ public class CheckOutUseCase implements CheckOutPort {
 
         entity.setCheckOut(nowTime);
 
-        String departureStatus = classifyDeparture(userId, projectId, entity.getStatus(), nowTime);
+        String departureStatus = classifyDeparture(userId, projectId, today, entity.getStatus(), nowTime);
         entity.setStatus(departureStatus);
 
         attendanceRepository.persist(entity);
@@ -100,31 +101,55 @@ public class CheckOutUseCase implements CheckOutPort {
     }
 
     /**
-     * Classify check-out against project schedule.
-     * If check-out is before workEndTime and the entry was ON_TIME → "EARLY_DEPARTURE".
-     * Otherwise preserves the original status (ON_TIME, LATE, etc.).
-     * If no schedule is defined, appends "_CHECKED_OUT" to existing status.
+     * Classify check-out against effective schedule (considers overrides and shift templates).
+     * Uses getEffectiveSchedule instead of raw project workEndTime.
      */
-    private String classifyDeparture(UUID userId, UUID projectId, String currentStatus, LocalTime checkOutTime) {
+    private String classifyDeparture(UUID userId, UUID projectId, LocalDate today, String currentStatus, LocalTime checkOutTime) {
         try {
-            java.util.List<ProjectOutput> projects = pmClientWrapper.getMyProjects();
-            if (projects == null) return currentStatus + "_CHECKED_OUT";
+            EffectiveScheduleOutput schedule = pmClientWrapper.getEffectiveSchedule(userId, projectId, today);
 
-            ProjectOutput matched = null;
-            for (ProjectOutput p : projects) {
-                if (p.id != null && p.id.equals(projectId)) {
-                    matched = p;
-                    break;
-                }
-            }
-
-            if (matched == null || matched.getWorkEndTime() == null || matched.getWorkEndTime().isBlank()) {
-                System.out.println("[CheckOut] No workEndTime defined. Status unchanged: " + currentStatus);
+            if (schedule == null || !schedule.workDay || schedule.expectedEndTime == null || schedule.expectedEndTime.isBlank()) {
+                System.out.println("[CheckOut] No work end time in effective schedule. Status unchanged: " + currentStatus);
                 return currentStatus + "_CHECKED_OUT";
             }
 
-            LocalTime workEnd = LocalTime.parse(matched.getWorkEndTime());
+            LocalTime workEnd = LocalTime.parse(schedule.expectedEndTime);
+            int grace = schedule.graceMinutes != null ? schedule.graceMinutes : 0;
 
+            LocalTime workStart = schedule.expectedStartTime != null && !schedule.expectedStartTime.isBlank()
+                    ? LocalTime.parse(schedule.expectedStartTime) : null;
+
+            // Night shift detection (workEnd < workStart, e.g. 22:00-06:00)
+            if (workStart != null && workEnd.isBefore(workStart)) {
+                boolean isPostMidnight = !checkOutTime.isAfter(workEnd) && !checkOutTime.isBefore(LocalTime.MIDNIGHT);
+                boolean isSameEvening = !checkOutTime.isBefore(workStart);
+
+                if (isPostMidnight) {
+                    // Checkout after midnight but within shift end — on-time
+                    System.out.println("[CheckOut] On-time departure (night shift, post-midnight) — checkOut=" + checkOutTime
+                            + ", workEnd=" + workEnd);
+                    return currentStatus + "_CHECKED_OUT";
+                }
+
+                if (isSameEvening) {
+                    // Checkout in [workStart, 23:59] — still on shift, check if too early
+                    long minutesUntilShiftEnd = java.time.Duration.between(checkOutTime, LocalTime.MAX).toMinutes()
+                            + java.time.Duration.between(LocalTime.MIN, workEnd).toMinutes() + 1;
+                    if (minutesUntilShiftEnd > grace + 60) {
+                        System.out.println("[CheckOut] EARLY_DEPARTURE (night shift) — checkOut=" + checkOutTime
+                                + ", workEnd=" + workEnd + ", minutesToEnd=" + minutesUntilShiftEnd);
+                        return "EARLY_DEPARTURE";
+                    }
+                    return currentStatus + "_CHECKED_OUT";
+                }
+
+                // Checkout outside both windows — early
+                System.out.println("[CheckOut] EARLY_DEPARTURE (outside night shift window) — checkOut=" + checkOutTime
+                        + ", workStart=" + workStart + ", workEnd=" + workEnd);
+                return "EARLY_DEPARTURE";
+            }
+
+            // Day shift (standard): workStart < workEnd
             if (checkOutTime.isBefore(workEnd)) {
                 System.out.println("[CheckOut] EARLY_DEPARTURE — checkOut=" + checkOutTime
                         + ", workEnd=" + workEnd);

@@ -10,6 +10,7 @@ import com.smms.assistance.infrastructure.repository.AttendanceRepository;
 import com.smms.assistance.infrastructure.storage.S3StorageAdapter;
 import com.smms.assistance.infrastructure.client.ProjectManagerClientWrapper;
 import com.smms.assistance.infrastructure.client.ProjectOutput;
+import com.smms.assistance.infrastructure.client.EffectiveScheduleOutput;
 import com.smms.assistance.shared.util.TimezoneService;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -111,12 +112,19 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
             }
         }
 
-        // Classify attendance based on effective schedule (backend only)
-        String attendanceStatus = classifyAttendance(matchedProject, nowTime);
+        // Classify attendance based on effective schedule from PM
+        EffectiveScheduleOutput schedule = null;
+        try {
+            schedule = pmClientWrapper.getEffectiveSchedule(userId, input.getProjectId(), today);
+        } catch (Exception e) {
+            System.out.println("[Attendance] Failed to retrieve effective schedule, fallback to project config: " + e.getMessage());
+        }
+
+        String attendanceStatus = classifyAttendance(schedule, matchedProject, nowTime);
         System.out.println("[Attendance] CLASSIFICATION=" + attendanceStatus
                 + " | checkIn=" + nowTime
-                + " | workStart=" + (matchedProject != null ? matchedProject.getWorkStartTime() : "null")
-                + " | grace=" + (matchedProject != null ? matchedProject.getGraceMinutes() : 0));
+                + " | workStart=" + (schedule != null ? schedule.expectedStartTime : "null")
+                + " | grace=" + (schedule != null ? schedule.graceMinutes : 0));
 
         UUID attendanceId = UUID.randomUUID();
 
@@ -160,7 +168,8 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
                 );
 
                 photoUrl = key;
-                alertsPhotoUrl = s3StorageAdapter.generatePresignedUrl(key, 120);
+                alertsPhotoUrl = s3StorageAdapter.generatePresignedUrl(key, 120)
+                        .replace("http://localhost:9010", "http://minio:9000");
 
             } catch (Exception e) {
 
@@ -188,24 +197,45 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
 
         attendanceRepository.persist(entity);
 
-        // Auto-generate absence when check-in is outside the allowed schedule window
-        if ("OUTSIDE_SCHEDULE".equals(attendanceStatus) || "EARLY".equals(attendanceStatus) || "LATE".equals(attendanceStatus)) {
+        // Absence generation for problematic check-ins
+        // OUTSIDE_SCHEDULE: user checked in outside their shift window → no absence (attendance already recorded)
+        // LATE/EARLY: user showed up at wrong time → generate absence with specific type
+        if ("EARLY".equals(attendanceStatus) || "LATE".equals(attendanceStatus)) {
             boolean hasAbsence = absenceRepository
                     .find("userId = ?1 and projectId = ?2 and date = ?3", userId, input.getProjectId(), today)
                     .firstResultOptional()
                     .isPresent();
             if (!hasAbsence) {
-                AbsenceEntity absence = AbsenceEntity.builder()
-                        .id(UUID.randomUUID())
-                        .userId(userId)
-                        .projectId(input.getProjectId())
-                        .date(today)
-                        .type("FALTA_AUTOMATICA")
-                        .justified(false)
-                        .build();
-                absenceRepository.persist(absence);
-                System.out.println("[Attendance] ABSENCE auto-generated for " + attendanceStatus + " check-in — userId="
-                        + userId + ", projectId=" + input.getProjectId() + ", date=" + today);
+                boolean onVacation = false;
+                boolean isHoliday = false;
+                try {
+                    onVacation = pmClientWrapper.hasApprovedVacation(userId, today);
+                } catch (Exception e) {
+                    System.out.println("[Attendance] Failed to check vacation status, proceeding: " + e.getMessage());
+                }
+                try {
+                    isHoliday = pmClientWrapper.isHoliday(input.getProjectId(), today);
+                } catch (Exception e) {
+                    System.out.println("[Attendance] Failed to check holiday, proceeding: " + e.getMessage());
+                }
+                if (onVacation) {
+                    System.out.println("[Attendance] SKIPPED absence — user " + userId + " has approved vacation on " + today);
+                } else if (isHoliday) {
+                    System.out.println("[Attendance] SKIPPED absence — today is holiday for project " + input.getProjectId());
+                } else {
+                    String absenceType = "LATE".equals(attendanceStatus) ? "TARDANZA" : "TEMPRANO";
+                    AbsenceEntity absence = AbsenceEntity.builder()
+                            .id(UUID.randomUUID())
+                            .userId(userId)
+                            .projectId(input.getProjectId())
+                            .date(today)
+                            .type(absenceType)
+                            .justified(false)
+                            .build();
+                    absenceRepository.persist(absence);
+                    System.out.println("[Attendance] " + absenceType + " auto-generated for " + attendanceStatus + " check-in — userId="
+                            + userId + ", projectId=" + input.getProjectId() + ", date=" + today);
+                }
             }
         }
 
@@ -241,6 +271,19 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
                 + ", checkIn: " + entity.getCheckIn()
                 + ", timestamp: " + timestamp 
                 + ", attendanceId: " + entity.getId());
+
+        // --- ORCHESTRATE NO-PHOTO ALERT ---
+        if (input.getPhotoUrl() == null || input.getPhotoUrl().isBlank()) {
+            System.out.println("📸 [Orchestrator] No photo provided. Creating NO_PHOTO alert.");
+            pmClientWrapper.createAlert(
+                    userId,
+                    entity.getProjectId(),
+                    "NO_PHOTO",
+                    "Asistencia sin foto",
+                    entity.getLatitude(),
+                    entity.getLongitude()
+            );
+        }
 
         // --- ORCHESTRATE STATELESS ALERTS ANALYSIS ---
         try {
@@ -298,7 +341,34 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
         return entity;
     }
 
-    private String classifyAttendance(ProjectOutput project, LocalTime checkIn) {
+    private String classifyAttendance(EffectiveScheduleOutput schedule, ProjectOutput project, LocalTime checkIn) {
+        if (schedule != null) {
+            if (!schedule.workDay) {
+                System.out.println("[Classification] Not a work day according to effective schedule. OUTSIDE_SCHEDULE.");
+                return "OUTSIDE_SCHEDULE";
+            }
+            if (schedule.expectedStartTime == null) {
+                System.out.println("[Classification] No schedule defined. Defaulting to CHECKED_IN.");
+                return "CHECKED_IN";
+            }
+            try {
+                LocalTime workStart = LocalTime.parse(schedule.expectedStartTime);
+                int grace = schedule.graceMinutes != null ? schedule.graceMinutes : 0;
+                LocalTime deadline = workStart.plusMinutes(grace);
+
+                LocalTime workEnd = null;
+                if (schedule.expectedEndTime != null && !schedule.expectedEndTime.isBlank()) {
+                    workEnd = LocalTime.parse(schedule.expectedEndTime);
+                }
+
+                return determineStatus(checkIn, workStart, workEnd, deadline, grace);
+            } catch (Exception e) {
+                System.out.println("[Classification] Error parsing schedule times: " + e.getMessage() + ". Defaulting to CHECKED_IN.");
+                return "CHECKED_IN";
+            }
+        }
+
+        // Fallback
         if (project == null || project.getWorkStartTime() == null) {
             System.out.println("[Classification] No schedule defined. Defaulting to CHECKED_IN.");
             return "CHECKED_IN";
@@ -314,39 +384,84 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
                 workEnd = LocalTime.parse(project.getWorkEndTime());
             }
 
-            // Before schedule window (e.g. earlier than 2 hours before work start)
-            LocalTime earliestAllowed = workStart.minusHours(2);
-            if (checkIn.isBefore(earliestAllowed)) {
-                System.out.println("[Classification] EARLY — checkIn=" + checkIn
-                        + ", workStart=" + workStart + ", earliestAllowed=" + earliestAllowed
-                        + ", workEnd=" + workEnd + ", graceMinutes=" + grace);
-                return "EARLY";
-            }
+            return determineStatus(checkIn, workStart, workEnd, deadline, grace);
+        } catch (Exception e) {
+            System.out.println("[Classification] Error parsing schedule times: " + e.getMessage()
+                    + ". Defaulting to CHECKED_IN.");
+            return "CHECKED_IN";
+        }
+    }
 
-            // After schedule window (if workEnd is defined)
-            if (workEnd != null && checkIn.isAfter(workEnd)) {
-                System.out.println("[Classification] OUTSIDE_SCHEDULE — checkIn=" + checkIn
+    private String determineStatus(LocalTime checkIn, LocalTime workStart, LocalTime workEnd, LocalTime deadline, int grace) {
+        // Night shift detection (workEnd < workStart, e.g. 22:00-06:00)
+        if (workEnd != null && workEnd.isBefore(workStart)) {
+            // Night shift: valid check-in window is [workStart, 23:59] or [00:00, workEnd]
+            boolean isInAfterMidnight = !checkIn.isAfter(workEnd) && !checkIn.isBefore(LocalTime.MIDNIGHT);
+            boolean isInSameEvening = !checkIn.isBefore(workStart);
+
+            if (!isInSameEvening && !isInAfterMidnight) {
+                System.out.println("[Classification] OUTSIDE_SCHEDULE (night shift) — checkIn=" + checkIn
                         + ", workStart=" + workStart + ", workEnd=" + workEnd
                         + ", graceMinutes=" + grace);
                 return "OUTSIDE_SCHEDULE";
             }
 
-            // Within schedule window: classify on-time vs late
-            if (checkIn.equals(deadline) || checkIn.isBefore(deadline)) {
-                System.out.println("[Classification] ON_TIME — checkIn=" + checkIn
-                        + ", workStart=" + workStart + ", deadline=" + deadline
-                        + ", workEnd=" + workEnd + ", graceMinutes=" + grace);
-                return "ON_TIME";
-            } else {
-                System.out.println("[Classification] LATE — checkIn=" + checkIn
-                        + ", workStart=" + workStart + ", deadline=" + deadline
-                        + ", workEnd=" + workEnd + ", graceMinutes=" + grace);
-                return "LATE";
+            // EARLY only applies to the same-evening window (2h before workStart)
+            if (isInSameEvening && checkIn.isBefore(workStart.minusHours(2))) {
+                System.out.println("[Classification] EARLY (night shift) — checkIn=" + checkIn
+                        + ", workStart=" + workStart + ", workEnd=" + workEnd
+                        + ", graceMinutes=" + grace);
+                return "EARLY";
             }
-        } catch (Exception e) {
-            System.out.println("[Classification] Error parsing schedule times: " + e.getMessage()
-                    + ". Defaulting to CHECKED_IN.");
-            return "CHECKED_IN";
+
+            if (isInSameEvening) {
+                // Arrived in [workStart, 23:59] — normal on-time/late check
+                if (checkIn.equals(deadline) || checkIn.isBefore(deadline)) {
+                    System.out.println("[Classification] ON_TIME (night shift) — checkIn=" + checkIn
+                            + ", workStart=" + workStart + ", deadline=" + deadline
+                            + ", workEnd=" + workEnd + ", graceMinutes=" + grace);
+                    return "ON_TIME";
+                } else {
+                    System.out.println("[Classification] LATE (night shift) — checkIn=" + checkIn
+                            + ", workStart=" + workStart + ", deadline=" + deadline
+                            + ", workEnd=" + workEnd + ", graceMinutes=" + grace);
+                    return "LATE";
+                }
+            }
+
+            // Arrived after midnight [00:00, workEnd] — always late vs 22:00 start
+            System.out.println("[Classification] LATE (night shift, post-midnight) — checkIn=" + checkIn
+                    + ", workStart=" + workStart + ", deadline=" + deadline
+                    + ", workEnd=" + workEnd + ", graceMinutes=" + grace);
+            return "LATE";
+        }
+
+        // Day shift (standard): workStart < workEnd
+        LocalTime earliestAllowed = workStart.minusHours(2);
+        if (checkIn.isBefore(earliestAllowed)) {
+            System.out.println("[Classification] EARLY — checkIn=" + checkIn
+                    + ", workStart=" + workStart + ", earliestAllowed=" + earliestAllowed
+                    + ", workEnd=" + workEnd + ", graceMinutes=" + grace);
+            return "EARLY";
+        }
+
+        if (workEnd != null && checkIn.isAfter(workEnd)) {
+            System.out.println("[Classification] OUTSIDE_SCHEDULE — checkIn=" + checkIn
+                    + ", workStart=" + workStart + ", workEnd=" + workEnd
+                    + ", graceMinutes=" + grace);
+            return "OUTSIDE_SCHEDULE";
+        }
+
+        if (checkIn.equals(deadline) || checkIn.isBefore(deadline)) {
+            System.out.println("[Classification] ON_TIME — checkIn=" + checkIn
+                    + ", workStart=" + workStart + ", deadline=" + deadline
+                    + ", workEnd=" + workEnd + ", graceMinutes=" + grace);
+            return "ON_TIME";
+        } else {
+            System.out.println("[Classification] LATE — checkIn=" + checkIn
+                    + ", workStart=" + workStart + ", deadline=" + deadline
+                    + ", workEnd=" + workEnd + ", graceMinutes=" + grace);
+            return "LATE";
         }
     }
 }

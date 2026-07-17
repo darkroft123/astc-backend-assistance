@@ -93,6 +93,42 @@ public class GenerateAbsenceIfNeededUseCase {
             return;
         }
 
+        // Check if today is a holiday for any of the user's projects
+        boolean isHolidayToday = false;
+        try {
+            java.util.List<com.smms.assistance.infrastructure.client.ProjectOutput> projects = projectManagerClientWrapper.getMyProjects();
+            if (projects != null) {
+                for (com.smms.assistance.infrastructure.client.ProjectOutput p : projects) {
+                    if (p.id != null && projectManagerClientWrapper.isHoliday(p.id, today)) {
+                        isHolidayToday = true;
+                        System.out.println("[AbsenceGen] Today " + today + " is a holiday for project " + p.name + ". Skipping absence.");
+                        break;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.out.println("[AbsenceGen] Failed to check holidays: " + e.getMessage());
+        }
+
+        if (isHolidayToday) {
+            return;
+        }
+
+        // Check if user has approved vacation for today
+        boolean onVacation = false;
+        try {
+            onVacation = projectManagerClientWrapper.hasApprovedVacation(userId, today);
+            if (onVacation) {
+                System.out.println("[AbsenceGen] User " + userId + " has approved vacation on " + today + ". Skipping absence.");
+            }
+        } catch (Exception e) {
+            System.out.println("[AbsenceGen] Failed to check vacation: " + e.getMessage());
+        }
+
+        if (onVacation) {
+            return;
+        }
+
         AbsenceEntity absence = AbsenceEntity.builder()
                 .id(UUID.randomUUID())
                 .userId(userId)

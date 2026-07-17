@@ -18,6 +18,7 @@ import jakarta.inject.Inject;
 
 import org.eclipse.microprofile.graphql.*;
 import org.jboss.logging.Logger;
+import io.smallrye.common.annotation.Blocking;
 import com.smms.assistance.infrastructure.client.AlertsClient;
 
 
@@ -26,6 +27,7 @@ import java.util.UUID;
 @GraphQLApi
 @ApplicationScoped
 @RolesAllowed({"TEAM_MEMBER", "PROJECT_MANAGER"})
+@Blocking
 public class AssistanceMutationResolver {
 
     private static final Logger LOG =

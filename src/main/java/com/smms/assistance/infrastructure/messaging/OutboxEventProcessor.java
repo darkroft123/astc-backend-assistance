@@ -31,6 +31,32 @@ public class OutboxEventProcessor {
 
     private static final Logger LOG = Logger.getLogger(OutboxEventProcessor.class);
 
+    private static final java.util.Map<String, String> STATUS_TRANSLATIONS = new java.util.HashMap<>();
+    static {
+        STATUS_TRANSLATIONS.put("ON_TIME", "A tiempo");
+        STATUS_TRANSLATIONS.put("ON_TIME_CHECKED_OUT", "A tiempo");
+        STATUS_TRANSLATIONS.put("LATE", "Tarde");
+        STATUS_TRANSLATIONS.put("LATE_CHECKED_OUT", "Tarde");
+        STATUS_TRANSLATIONS.put("EARLY", "Fuera de horario");
+        STATUS_TRANSLATIONS.put("OUTSIDE_SCHEDULE", "Fuera de horario");
+        STATUS_TRANSLATIONS.put("EARLY_DEPARTURE", "Salida temprana");
+        STATUS_TRANSLATIONS.put("CHECKED_IN", "Registrado");
+        STATUS_TRANSLATIONS.put("PRESENTE", "Presente");
+        STATUS_TRANSLATIONS.put("FALTA", "Falta");
+        STATUS_TRANSLATIONS.put("UNJUSTIFIED", "No justificada");
+        STATUS_TRANSLATIONS.put("PENDING", "Borrador");
+        STATUS_TRANSLATIONS.put("SUBMITTED", "Enviado");
+        STATUS_TRANSLATIONS.put("OBSERVATION", "Observado");
+        STATUS_TRANSLATIONS.put("APPROVED", "Aprobado");
+        STATUS_TRANSLATIONS.put("REJECTED", "Rechazado");
+    }
+
+    private static String translateStatus(String rawStatus) {
+        if (rawStatus == null) return "";
+        String translated = STATUS_TRANSLATIONS.get(rawStatus.toUpperCase());
+        return translated != null ? translated : rawStatus;
+    }
+
     @Inject
     OutboxRepository outboxRepository;
 
@@ -230,7 +256,7 @@ public class OutboxEventProcessor {
                 if (attendance.getDate() != null) {
                     variables.put("ATTENDANCE_DATE", attendance.getDate().toString());
                 }
-                variables.put("STATUS", attendance.getStatus() != null ? attendance.getStatus() : "");
+                variables.put("STATUS", translateStatus(attendance.getStatus()));
             }
         }
 
@@ -268,7 +294,7 @@ public class OutboxEventProcessor {
         if (justificationId != null) {
             JustificationEntity justification = justificationRepository.findByIdOptional(UUID.fromString(justificationId)).orElse(null);
             if (justification != null) {
-                variables.put("STATUS", justification.getStatus() != null ? justification.getStatus() : "PENDING");
+                variables.put("STATUS", translateStatus(justification.getStatus()));
             }
         }
 

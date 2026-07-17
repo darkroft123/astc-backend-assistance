@@ -5,6 +5,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.jwt.JsonWebToken;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import java.util.logging.Level;
@@ -42,6 +43,66 @@ public class ProjectManagerClientWrapper {
         } catch (Exception e) {
             LOG.log(Level.SEVERE, "❌ GetMyProjects failed", e);
             throw e;
+        }
+    }
+
+    public EffectiveScheduleOutput getEffectiveSchedule(UUID userId, UUID projectId, LocalDate date) {
+        LOG.info("📡 Calling Project Manager: GetEffectiveSchedule...");
+        long startTime = System.currentTimeMillis();
+        try {
+            var builder = TypesafeGraphQLClientBuilder.newBuilder()
+                    .configKey("project-manager-service");
+            if (jwt != null && jwt.getRawToken() != null) {
+                builder = builder.header("Authorization", "Bearer " + jwt.getRawToken());
+            }
+            ProjectManagerClient client = builder.build(ProjectManagerClient.class);
+            EffectiveScheduleOutput result = client.getEffectiveSchedule(userId, projectId, date.toString());
+            LOG.info("✅ GetEffectiveSchedule OK (" +
+                    (System.currentTimeMillis() - startTime) + "ms)");
+            return result;
+        } catch (Exception e) {
+            LOG.log(Level.SEVERE, "❌ GetEffectiveSchedule failed", e);
+            return null;
+        }
+    }
+
+    public boolean isHoliday(UUID projectId, LocalDate date) {
+        LOG.info("📡 Calling Project Manager: IsHoliday...");
+        long startTime = System.currentTimeMillis();
+        try {
+            var builder = TypesafeGraphQLClientBuilder.newBuilder()
+                    .configKey("project-manager-service");
+            if (jwt != null && jwt.getRawToken() != null) {
+                builder = builder.header("Authorization", "Bearer " + jwt.getRawToken());
+            }
+            ProjectManagerClient client = builder.build(ProjectManagerClient.class);
+            boolean result = client.isHoliday(projectId, date);
+            LOG.info("✅ IsHoliday=" + result + " (" +
+                    (System.currentTimeMillis() - startTime) + "ms)");
+            return result;
+        } catch (Exception e) {
+            LOG.log(Level.SEVERE, "❌ IsHoliday failed", e);
+            return false;
+        }
+    }
+
+    public boolean hasApprovedVacation(UUID userId, LocalDate date) {
+        LOG.info("📡 Calling Project Manager: HasApprovedVacation...");
+        long startTime = System.currentTimeMillis();
+        try {
+            var builder = TypesafeGraphQLClientBuilder.newBuilder()
+                    .configKey("project-manager-service");
+            if (jwt != null && jwt.getRawToken() != null) {
+                builder = builder.header("Authorization", "Bearer " + jwt.getRawToken());
+            }
+            ProjectManagerClient client = builder.build(ProjectManagerClient.class);
+            boolean result = client.hasApprovedVacation(userId, date);
+            LOG.info("✅ HasApprovedVacation=" + result + " (" +
+                    (System.currentTimeMillis() - startTime) + "ms)");
+            return result;
+        } catch (Exception e) {
+            LOG.log(Level.SEVERE, "❌ HasApprovedVacation failed", e);
+            return false;
         }
     }
 

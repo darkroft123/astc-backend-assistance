@@ -19,6 +19,7 @@ import jakarta.inject.Inject;
 import org.eclipse.microprofile.graphql.GraphQLApi;
 import org.eclipse.microprofile.graphql.Name;
 import org.eclipse.microprofile.graphql.Query;
+import io.smallrye.common.annotation.Blocking;
 
 import org.jboss.logging.Logger;
 
@@ -32,6 +33,7 @@ import java.util.stream.Collectors;
 @GraphQLApi
 @ApplicationScoped
 @RolesAllowed({"TEAM_MEMBER", "PROJECT_MANAGER"})
+@Blocking
 public class AssistanceQueryResolver {
 
     private static final Logger LOG =
