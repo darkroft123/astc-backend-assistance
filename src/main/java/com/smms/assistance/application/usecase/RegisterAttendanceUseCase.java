@@ -68,7 +68,20 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
             }
         }
 
-        if (!isAssigned) {
+        boolean isGlobalAdminOrPM = false;
+        if (jwt != null && jwt.getGroups() != null) {
+            java.util.Set<String> groups = jwt.getGroups();
+            if (groups.contains("ADMIN") || groups.contains("PROJECT_MANAGER")) {
+                isGlobalAdminOrPM = true;
+            }
+        }
+
+        if (input.getProjectId() == null) {
+            if (!isGlobalAdminOrPM) {
+                System.out.println("[Audit Log] Validation failure: projectId is null but user is not Admin/PM");
+                throw new IllegalArgumentException("Debes seleccionar un proyecto.");
+            }
+        } else if (!isAssigned) {
             System.out.println("[Audit Log] Validation failure: projectId " + input.getProjectId() 
                     + " is not part of the user's assigned projects. userId: " + userId);
             System.out.println("[Audit Log] Attendance registration failed - userId: " + userId 
@@ -87,10 +100,18 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
         LocalTime nowTime = nowInProjectZone.toLocalTime();
 
         // Step 1: Check if attendance already exists for today
-        boolean existsToday = attendanceRepository
-                .find("userId = ?1 and projectId = ?2 and date = ?3", userId, input.getProjectId(), today)
-                .firstResultOptional()
-                .isPresent();
+        boolean existsToday;
+        if (input.getProjectId() == null) {
+            existsToday = attendanceRepository
+                    .find("userId = ?1 and projectId is null and date = ?2", userId, today)
+                    .firstResultOptional()
+                    .isPresent();
+        } else {
+            existsToday = attendanceRepository
+                    .find("userId = ?1 and projectId = ?2 and date = ?3", userId, input.getProjectId(), today)
+                    .firstResultOptional()
+                    .isPresent();
+        }
 
         System.out.println("[Attendance] EXISTS_TODAY=" + existsToday
                 + " | userId=" + userId + " projectId=" + input.getProjectId() + " date=" + today);
@@ -101,10 +122,18 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
             System.out.println("[Attendance] REPLACE_ENABLED=" + shouldReplace);
 
             if (shouldReplace) {
-                long deleted = attendanceRepository.delete(
-                        "userId = ?1 and projectId = ?2 and date = ?3",
-                        userId, input.getProjectId(), today
-                );
+                long deleted;
+                if (input.getProjectId() == null) {
+                    deleted = attendanceRepository.delete(
+                            "userId = ?1 and projectId is null and date = ?2",
+                            userId, today
+                    );
+                } else {
+                    deleted = attendanceRepository.delete(
+                            "userId = ?1 and projectId = ?2 and date = ?3",
+                            userId, input.getProjectId(), today
+                    );
+                }
                 System.out.println("[Attendance] DELETED_AND_RECREATED | deleted=" + deleted
                         + " records for userId=" + userId);
             } else {
@@ -201,10 +230,18 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
         // OUTSIDE_SCHEDULE: user checked in outside their shift window → no absence (attendance already recorded)
         // LATE/EARLY: user showed up at wrong time → generate absence with specific type
         if ("EARLY".equals(attendanceStatus) || "LATE".equals(attendanceStatus)) {
-            boolean hasAbsence = absenceRepository
-                    .find("userId = ?1 and projectId = ?2 and date = ?3", userId, input.getProjectId(), today)
-                    .firstResultOptional()
-                    .isPresent();
+            boolean hasAbsence;
+            if (input.getProjectId() == null) {
+                hasAbsence = absenceRepository
+                        .find("userId = ?1 and projectId is null and date = ?2", userId, today)
+                        .firstResultOptional()
+                        .isPresent();
+            } else {
+                hasAbsence = absenceRepository
+                        .find("userId = ?1 and projectId = ?2 and date = ?3", userId, input.getProjectId(), today)
+                        .firstResultOptional()
+                        .isPresent();
+            }
             if (!hasAbsence) {
                 boolean onVacation = false;
                 boolean isHoliday = false;

@@ -40,9 +40,16 @@ public class CheckOutUseCase implements CheckOutPort {
         LocalDate today = nowInProjectZone.toLocalDate();
         LocalTime nowTime = nowInProjectZone.toLocalTime();
 
-        Optional<AttendanceEntity> existing = attendanceRepository
-                .find("userId = ?1 and projectId = ?2 and date = ?3", userId, projectId, today)
-                .firstResultOptional();
+        Optional<AttendanceEntity> existing;
+        if (projectId == null) {
+            existing = attendanceRepository
+                    .find("userId = ?1 and projectId is null and date = ?2", userId, today)
+                    .firstResultOptional();
+        } else {
+            existing = attendanceRepository
+                    .find("userId = ?1 and projectId = ?2 and date = ?3", userId, projectId, today)
+                    .firstResultOptional();
+        }
 
         if (existing.isEmpty()) {
             throw new IllegalStateException("No hay registro de entrada para hoy. Registre su entrada primero.");

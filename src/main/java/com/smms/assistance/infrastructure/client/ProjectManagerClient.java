@@ -12,17 +12,17 @@ import java.util.UUID;
 @GraphQLClientApi(configKey = "project-manager-service")
 public interface ProjectManagerClient {
 
-    @Query("GetMyProjects")
+    @Query("getmyprojects")
     List<ProjectOutput> getMyProjects();
 
-    @Query("GetEffectiveSchedule")
+    @Query("geteffectiveschedule")
     EffectiveScheduleOutput getEffectiveSchedule(
             @Name("userId") UUID userId,
             @Name("projectId") UUID projectId,
             @Name("date") String date
     );
 
-    @Mutation("CreateAlert")
+    @Mutation("createalert")
     AlertOutput createAlert(
             @Name("userId") UUID userId,
             @Name("projectId") UUID projectId,
@@ -32,13 +32,13 @@ public interface ProjectManagerClient {
             @Name("longitude") Double longitude
     );
 
-    @Query("HasApprovedVacation")
+    @Query("hasapprovedvacation")
     boolean hasApprovedVacation(
             @Name("userId") UUID userId,
             @Name("date") LocalDate date
     );
 
-    @Query("IsHoliday")
+    @Query("isholiday")
     boolean isHoliday(
             @Name("projectId") UUID projectId,
             @Name("date") LocalDate date

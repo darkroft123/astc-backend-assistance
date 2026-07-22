@@ -32,7 +32,7 @@ import java.util.stream.Collectors;
 
 @GraphQLApi
 @ApplicationScoped
-@RolesAllowed({"TEAM_MEMBER", "PROJECT_MANAGER"})
+@RolesAllowed({"TEAM_MEMBER", "PROJECT_MANAGER", "ADMIN"})
 @Blocking
 public class AssistanceQueryResolver {
 
@@ -75,8 +75,7 @@ public class AssistanceQueryResolver {
     // =========================
     // GET MY PROJECTS
     // =========================
-    @Query("GetMyProjects")
-    @RolesAllowed("TEAM_MEMBER")
+    @Query("getmyprojects")
     public java.util.List<com.smms.assistance.infrastructure.client.ProjectOutput> getMyProjects() {
         logSecurity("GetMyProjects");
         return pmClientWrapper.getMyProjects();
@@ -85,8 +84,7 @@ public class AssistanceQueryResolver {
     // =========================
     // GET DASHBOARD
     // =========================
-    @Query("GetDashboard")
-    @RolesAllowed("TEAM_MEMBER")
+    @Query("getdashboard")
     public DashboardOutput getDashboard(
             @Name("fromDate") String fromDate,
             @Name("toDate") String toDate) {
@@ -119,8 +117,7 @@ public class AssistanceQueryResolver {
     // =========================
     // LIST ATTENDANCE
     // =========================
-    @Query("ListAttendance")
-    @RolesAllowed("TEAM_MEMBER")
+    @Query("listattendance")
     public AttendancePageOutput listAttendance(
             @Name("page") int page,
             @Name("size") int size,
@@ -159,16 +156,20 @@ public class AssistanceQueryResolver {
     // =========================
     // GET TODAY'S ATTENDANCE
     // =========================
-    @Query("GetTodayAttendance")
-    @RolesAllowed("TEAM_MEMBER")
+    @Query("gettodayattendance")
+    @RolesAllowed({"TEAM_MEMBER", "PROJECT_MANAGER", "ADMIN"})
     public AttendanceOutput getTodayAttendance(@Name("projectId") UUID projectId) {
         UUID userId = authContext.getUserId();
         String timezone = resolveProjectTimezone(userId, projectId);
         java.time.LocalDate today = TimezoneService.todayAtZone(timezone);
 
-        var existing = attendanceRepository
-                .find("userId = ?1 and projectId = ?2 and date = ?3", userId, projectId, today)
-                .firstResultOptional();
+        var existing = (projectId == null)
+                ? attendanceRepository
+                        .find("userId = ?1 and projectId is null and date = ?2", userId, today)
+                        .firstResultOptional()
+                : attendanceRepository
+                        .find("userId = ?1 and projectId = ?2 and date = ?3", userId, projectId, today)
+                        .firstResultOptional();
 
         if (existing.isEmpty()) return null;
 
@@ -182,8 +183,7 @@ public class AssistanceQueryResolver {
     // =========================
     // LIST ABSENCES
     // =========================
-    @Query("ListAbsences")
-    @RolesAllowed("TEAM_MEMBER")
+    @Query("listabsences")
     public AbsencePageOutput listAbsences(
             @Name("page") int page,
             @Name("size") int size,
@@ -214,8 +214,7 @@ public class AssistanceQueryResolver {
     // =========================
     // LIST JUSTIFICATIONS
     // =========================
-    @Query("ListJustifications")
-    @RolesAllowed("TEAM_MEMBER")
+    @Query("listjustifications")
     public JustificationPageOutput listJustifications(
             @Name("page") int page,
             @Name("size") int size,
@@ -252,8 +251,7 @@ public class AssistanceQueryResolver {
     // =========================
     // GET JUSTIFICATION STATUS
     // =========================
-    @Query("GetJustificationStatus")
-    @RolesAllowed("TEAM_MEMBER")
+    @Query("getjustificationstatus")
     public JustificationStatusOutput getJustificationStatus(
             @Name("justificationId") UUID justificationId) {
 
@@ -298,7 +296,7 @@ public class AssistanceQueryResolver {
     // PROJECT MANAGER ENDPOINTS
     // ==========================================
 
-    @Query("ListTeamAttendancePM")
+    @Query("listteamattendancepm")
     @RolesAllowed("PROJECT_MANAGER")
     public AttendancePageOutput listTeamAttendancePM(
             @Name("userIds") java.util.List<UUID> userIds,
@@ -346,7 +344,7 @@ public class AssistanceQueryResolver {
         return output;
     }
 
-    @Query("ListTeamJustificationsPM")
+    @Query("listteamjustificationspm")
     @RolesAllowed("PROJECT_MANAGER")
     public JustificationPageOutput listTeamJustificationsPM(
             @Name("userIds") java.util.List<UUID> userIds,
@@ -389,7 +387,7 @@ public class AssistanceQueryResolver {
         return output;
     }
 
-    @Query("GetJustificationDetailPM")
+    @Query("getjustificationdetailpm")
     public JustificationOutput getJustificationDetailPM(@Name("id") UUID id) {
         UUID currentUserId = authContext.getUserId();
         String currentRole = authContext.getRole();
@@ -438,7 +436,7 @@ public class AssistanceQueryResolver {
         return output;
     }
 
-    @Query("GetDashboardPMInternal")
+    @Query("getdashboardpminternal")
     @RolesAllowed("PROJECT_MANAGER")
     public DashboardOutput getDashboardPMInternal(
             @Name("userIds") java.util.List<UUID> userIds,

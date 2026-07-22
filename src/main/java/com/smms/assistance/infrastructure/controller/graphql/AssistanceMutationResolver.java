@@ -26,7 +26,7 @@ import java.util.UUID;
 
 @GraphQLApi
 @ApplicationScoped
-@RolesAllowed({"TEAM_MEMBER", "PROJECT_MANAGER"})
+@RolesAllowed({"TEAM_MEMBER", "PROJECT_MANAGER", "ADMIN"})
 @Blocking
 public class AssistanceMutationResolver {
 
@@ -72,8 +72,8 @@ public class AssistanceMutationResolver {
     // =========================
     // REGISTER ATTENDANCE
     // =========================
-    @Mutation("RegisterAttendance")
-    @RolesAllowed("TEAM_MEMBER")
+    @Mutation("registerattendance")
+    @RolesAllowed({"TEAM_MEMBER", "PROJECT_MANAGER", "ADMIN"})
 public RegisterAttendanceOutput registerAttendance(
         @Name("input") RegisterAttendanceInput input) {
 
@@ -113,8 +113,8 @@ public RegisterAttendanceOutput registerAttendance(
     // =========================
     // CHECK-OUT (EXIT REGISTRATION)
     // =========================
-    @Mutation("CheckOut")
-    @RolesAllowed("TEAM_MEMBER")
+    @Mutation("checkout")
+    @RolesAllowed({"TEAM_MEMBER", "PROJECT_MANAGER", "ADMIN"})
     public RegisterAttendanceOutput checkOut(@Name("projectId") UUID projectId) {
         UUID userId = authContext.getUserId();
         LOG.infof("🚀 CheckOut START -> userId=%s projectId=%s", userId, projectId);
@@ -126,8 +126,7 @@ public RegisterAttendanceOutput registerAttendance(
     // =========================
     // JUSTIFY ABSENCE
     // =========================
-    @Mutation("JustifyAbsence")
-    @RolesAllowed("TEAM_MEMBER")
+    @Mutation("justifyabsence")
     public JustifyAbsenceOutput justifyAbsence(
             @Name("input") JustifyAbsenceInput input) {
 
@@ -159,8 +158,7 @@ public RegisterAttendanceOutput registerAttendance(
     // =========================
     // SAVE JUSTIFICATION
     // =========================
-    @Mutation("SaveJustification")
-    @RolesAllowed("TEAM_MEMBER")
+    @Mutation("savejustification")
     public SaveJustificationOutput saveJustification(
             @Name("input") SaveJustificationInput input) {
 
@@ -214,8 +212,7 @@ public RegisterAttendanceOutput registerAttendance(
     // =========================
     // EDIT JUSTIFICATION
     // =========================
-    @Mutation("EditJustification")
-    @RolesAllowed("TEAM_MEMBER")
+    @Mutation("editjustification")
     public SaveJustificationOutput editJustification(
             @Name("id") UUID id,
             @Name("input") SaveJustificationInput input) {
@@ -245,8 +242,7 @@ public RegisterAttendanceOutput registerAttendance(
     // =========================
     // DELETE JUSTIFICATION
     // =========================
-    @Mutation("DeleteJustification")
-    @RolesAllowed("TEAM_MEMBER")
+    @Mutation("deletejustification")
     public Boolean deleteJustification(@Name("id") UUID id) {
 
         logSecurity("DeleteJustification");
@@ -271,8 +267,7 @@ public RegisterAttendanceOutput registerAttendance(
     // =========================
     // SUBMIT JUSTIFICATION (PENDING/OBSERVATION → SUBMITTED)
     // =========================
-    @Mutation("SubmitJustification")
-    @RolesAllowed("TEAM_MEMBER")
+    @Mutation("submitjustification")
     public SaveJustificationOutput submitJustification(@Name("id") UUID id) {
         UUID userId = authContext.getUserId();
         LOG.infof("🚀 SubmitJustification START -> userId=%s justificationId=%s", userId, id);
@@ -291,7 +286,7 @@ public RegisterAttendanceOutput registerAttendance(
     // =========================
     // REQUEST OBSERVATION PM (SUBMITTED → OBSERVATION)
     // =========================
-    @Mutation("RequestObservationPM")
+    @Mutation("requestobservationpm")
     @RolesAllowed("PROJECT_MANAGER")
     public JustificationOutput requestObservationPM(
             @Name("justificationId") UUID justificationId,
@@ -311,7 +306,7 @@ public RegisterAttendanceOutput registerAttendance(
     // PROJECT MANAGER MUTATIONS
     // ==========================================
 
-    @Mutation("ApproveJustificationPM")
+    @Mutation("approvejustificationpm")
     @RolesAllowed("PROJECT_MANAGER")
     public JustificationOutput approveJustificationPM(
             @Name("justificationId") UUID justificationId,
@@ -331,7 +326,7 @@ public RegisterAttendanceOutput registerAttendance(
         return DtoMapper.toJustificationOutput(result);
     }
 
-    @Mutation("RejectJustificationPM")
+    @Mutation("rejectjustificationpm")
     @RolesAllowed("PROJECT_MANAGER")
     public JustificationOutput rejectJustificationPM(
             @Name("justificationId") UUID justificationId,
