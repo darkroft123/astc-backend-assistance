@@ -7,6 +7,6 @@ import org.eclipse.microprofile.graphql.Name;
 @GraphQLClientApi(configKey = "auth-service")
 public interface AuthClient {
 
-    @Query("getuser")
+    @Query("getUser")
     UserOutput getUser(@Name("id") String id);
 }

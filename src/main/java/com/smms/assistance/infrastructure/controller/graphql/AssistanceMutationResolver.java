@@ -69,10 +69,19 @@ public class AssistanceMutationResolver {
     @Inject
     CheckOutPort checkOutPort;
 
+    @Inject
+    com.smms.assistance.infrastructure.client.ProjectManagerClientWrapper pmClientWrapper;
+
+    @Inject
+    com.smms.assistance.infrastructure.repository.JustificationRepository justificationRepository;
+
+    @Inject
+    com.smms.assistance.infrastructure.repository.AbsenceRepository absenceRepository;
+
     // =========================
     // REGISTER ATTENDANCE
     // =========================
-    @Mutation("registerattendance")
+    @Mutation("registerAttendance")
     @RolesAllowed({"TEAM_MEMBER", "PROJECT_MANAGER", "ADMIN"})
 public RegisterAttendanceOutput registerAttendance(
         @Name("input") RegisterAttendanceInput input) {
@@ -113,7 +122,7 @@ public RegisterAttendanceOutput registerAttendance(
     // =========================
     // CHECK-OUT (EXIT REGISTRATION)
     // =========================
-    @Mutation("checkout")
+    @Mutation("checkOut")
     @RolesAllowed({"TEAM_MEMBER", "PROJECT_MANAGER", "ADMIN"})
     public RegisterAttendanceOutput checkOut(@Name("projectId") UUID projectId) {
         UUID userId = authContext.getUserId();
@@ -126,7 +135,7 @@ public RegisterAttendanceOutput registerAttendance(
     // =========================
     // JUSTIFY ABSENCE
     // =========================
-    @Mutation("justifyabsence")
+    @Mutation("justifyAbsence")
     public JustifyAbsenceOutput justifyAbsence(
             @Name("input") JustifyAbsenceInput input) {
 
@@ -158,7 +167,7 @@ public RegisterAttendanceOutput registerAttendance(
     // =========================
     // SAVE JUSTIFICATION
     // =========================
-    @Mutation("savejustification")
+    @Mutation("saveJustification")
     public SaveJustificationOutput saveJustification(
             @Name("input") SaveJustificationInput input) {
 
@@ -212,7 +221,7 @@ public RegisterAttendanceOutput registerAttendance(
     // =========================
     // EDIT JUSTIFICATION
     // =========================
-    @Mutation("editjustification")
+    @Mutation("editJustification")
     public SaveJustificationOutput editJustification(
             @Name("id") UUID id,
             @Name("input") SaveJustificationInput input) {
@@ -242,7 +251,7 @@ public RegisterAttendanceOutput registerAttendance(
     // =========================
     // DELETE JUSTIFICATION
     // =========================
-    @Mutation("deletejustification")
+    @Mutation("deleteJustification")
     public Boolean deleteJustification(@Name("id") UUID id) {
 
         logSecurity("DeleteJustification");
@@ -267,7 +276,7 @@ public RegisterAttendanceOutput registerAttendance(
     // =========================
     // SUBMIT JUSTIFICATION (PENDING/OBSERVATION → SUBMITTED)
     // =========================
-    @Mutation("submitjustification")
+    @Mutation("submitJustification")
     public SaveJustificationOutput submitJustification(@Name("id") UUID id) {
         UUID userId = authContext.getUserId();
         LOG.infof("🚀 SubmitJustification START -> userId=%s justificationId=%s", userId, id);
@@ -286,7 +295,7 @@ public RegisterAttendanceOutput registerAttendance(
     // =========================
     // REQUEST OBSERVATION PM (SUBMITTED → OBSERVATION)
     // =========================
-    @Mutation("requestobservationpm")
+    @Mutation("requestObservationPM")
     @RolesAllowed("PROJECT_MANAGER")
     public JustificationOutput requestObservationPM(
             @Name("justificationId") UUID justificationId,
@@ -297,6 +306,8 @@ public RegisterAttendanceOutput registerAttendance(
         System.out.println("[Assistance PM API] [Mutation] RequestObservationPM by PM: " + currentPmId
                 + " -> justificationId: " + justificationId);
 
+        validatePmOwnershipForJustification(justificationId);
+
         var result = requestObservationPMUseCase.execute(justificationId, comment, reviewedBy);
 
         return DtoMapper.toJustificationOutput(result);
@@ -306,7 +317,7 @@ public RegisterAttendanceOutput registerAttendance(
     // PROJECT MANAGER MUTATIONS
     // ==========================================
 
-    @Mutation("approvejustificationpm")
+    @Mutation("approveJustificationPM")
     @RolesAllowed("PROJECT_MANAGER")
     public JustificationOutput approveJustificationPM(
             @Name("justificationId") UUID justificationId,
@@ -319,6 +330,8 @@ public RegisterAttendanceOutput registerAttendance(
                 + ", comment: " + comment 
                 + ", reviewedBy: " + reviewedBy);
 
+        validatePmOwnershipForJustification(justificationId);
+
         var result = approveJustificationPort.execute(justificationId, comment, reviewedBy);
 
         System.out.println("[Assistance PM API] [Mutation] ApproveJustificationPM completed -> justificationId: " + justificationId + ", new status: " + result.getStatus());
@@ -326,7 +339,7 @@ public RegisterAttendanceOutput registerAttendance(
         return DtoMapper.toJustificationOutput(result);
     }
 
-    @Mutation("rejectjustificationpm")
+    @Mutation("rejectJustificationPM")
     @RolesAllowed("PROJECT_MANAGER")
     public JustificationOutput rejectJustificationPM(
             @Name("justificationId") UUID justificationId,
@@ -339,10 +352,48 @@ public RegisterAttendanceOutput registerAttendance(
                 + ", comment: " + comment 
                 + ", reviewedBy: " + reviewedBy);
 
+        validatePmOwnershipForJustification(justificationId);
+
         var result = rejectJustificationPort.execute(justificationId, comment, reviewedBy);
 
         System.out.println("[Assistance PM API] [Mutation] RejectJustificationPM completed -> justificationId: " + justificationId + ", new status: " + result.getStatus());
 
         return DtoMapper.toJustificationOutput(result);
+    }
+
+    // ==========================================
+    // SECURITY VALIDATION (IDOR PATCH + LOGS)
+    // ==========================================
+    private void validatePmOwnershipForJustification(UUID justificationId) {
+        String role = authContext.getRole();
+        if ("ADMIN".equals(role)) {
+            System.out.println("🛡️ [Security] ADMIN bypass granted for justificationId: " + justificationId);
+            return;
+        }
+        if ("PROJECT_MANAGER".equals(role)) {
+            com.smms.assistance.domain.entity.JustificationEntity justification = justificationRepository.findById(justificationId);
+            if (justification == null) throw new SecurityException("Access Denied: Justification not found");
+            
+            com.smms.assistance.domain.entity.AbsenceEntity absence = absenceRepository.findById(justification.getAbsenceId());
+            if (absence == null || absence.getProjectId() == null) {
+                throw new SecurityException("Access Denied: Absence or Project not found");
+            }
+            
+            UUID projectId = absence.getProjectId();
+            try {
+                java.util.List<com.smms.assistance.infrastructure.client.ProjectOutput> projects = pmClientWrapper.getMyProjects();
+                if (projects == null || projects.stream().noneMatch(p -> p.id != null && p.id.equals(projectId))) {
+                    System.out.println("🚨 [Security IDOR Blocked] PM " + authContext.getUserId() + " attempted to access unauthorized justificationId: " + justificationId);
+                    throw new SecurityException("Access Denied: You do not manage the project for this justification");
+                }
+                System.out.println("✅ [Security] PM Ownership validated for justification: " + justificationId);
+            } catch (Exception e) {
+                System.out.println("🚨 [Security Error] " + e.getMessage());
+                throw new SecurityException("Access Denied: Could not verify project ownership");
+            }
+        } else {
+            System.out.println("🚨 [Security Blocked] Unauthorized role " + role + " attempted to access justification: " + justificationId);
+            throw new SecurityException("Access Denied: Insufficient role");
+        }
     }
 }

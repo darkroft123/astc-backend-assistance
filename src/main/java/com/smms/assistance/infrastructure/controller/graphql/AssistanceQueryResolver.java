@@ -84,7 +84,7 @@ public class AssistanceQueryResolver {
     // =========================
     // GET DASHBOARD
     // =========================
-    @Query("getdashboard")
+    @Query("getDashboard")
     public DashboardOutput getDashboard(
             @Name("fromDate") String fromDate,
             @Name("toDate") String toDate) {
@@ -117,7 +117,7 @@ public class AssistanceQueryResolver {
     // =========================
     // LIST ATTENDANCE
     // =========================
-    @Query("listattendance")
+    @Query("listAttendance")
     public AttendancePageOutput listAttendance(
             @Name("page") int page,
             @Name("size") int size,
@@ -156,7 +156,7 @@ public class AssistanceQueryResolver {
     // =========================
     // GET TODAY'S ATTENDANCE
     // =========================
-    @Query("gettodayattendance")
+    @Query("getTodayAttendance")
     @RolesAllowed({"TEAM_MEMBER", "PROJECT_MANAGER", "ADMIN"})
     public AttendanceOutput getTodayAttendance(@Name("projectId") UUID projectId) {
         UUID userId = authContext.getUserId();
@@ -183,7 +183,7 @@ public class AssistanceQueryResolver {
     // =========================
     // LIST ABSENCES
     // =========================
-    @Query("listabsences")
+    @Query("listAbsences")
     public AbsencePageOutput listAbsences(
             @Name("page") int page,
             @Name("size") int size,
@@ -214,7 +214,7 @@ public class AssistanceQueryResolver {
     // =========================
     // LIST JUSTIFICATIONS
     // =========================
-    @Query("listjustifications")
+    @Query("listJustifications")
     public JustificationPageOutput listJustifications(
             @Name("page") int page,
             @Name("size") int size,
@@ -251,7 +251,7 @@ public class AssistanceQueryResolver {
     // =========================
     // GET JUSTIFICATION STATUS
     // =========================
-    @Query("getjustificationstatus")
+    @Query("getJustificationStatus")
     public JustificationStatusOutput getJustificationStatus(
             @Name("justificationId") UUID justificationId) {
 
@@ -293,10 +293,38 @@ public class AssistanceQueryResolver {
     }
 
     // ==========================================
+    // SECURITY VALIDATION (IDOR PATCH)
+    // ==========================================
+    private void validatePmOwnership(UUID requestedProjectId) {
+        String role = authContext.getRole();
+        if ("ADMIN".equals(role)) {
+            System.out.println("🛡️ [Security] ADMIN bypass granted for projectId: " + requestedProjectId);
+            return; // Admins can access all projects
+        }
+        if ("PROJECT_MANAGER".equals(role)) {
+            if (requestedProjectId == null) {
+                System.out.println("⚠️ [Security] PM accessing global view (projectId is null). Trusting upstream caller (project-assistance) to filter userIds.");
+                return;
+            }
+            try {
+                java.util.List<ProjectOutput> projects = pmClientWrapper.getMyProjects();
+                if (projects == null || projects.stream().noneMatch(p -> p.id != null && p.id.equals(requestedProjectId))) {
+                    System.out.println("🚨 [Security IDOR Blocked] PM " + authContext.getUserId() + " attempted to access unauthorized projectId: " + requestedProjectId);
+                    throw new SecurityException("Access Denied: You do not own or manage this project");
+                }
+                System.out.println("✅ [Security] PM Ownership validated for project: " + requestedProjectId);
+            } catch (Exception e) {
+                LOG.error("Failed to validate PM ownership: " + e.getMessage());
+                throw new SecurityException("Access Denied: Could not verify project ownership");
+            }
+        }
+    }
+
+    // ==========================================
     // PROJECT MANAGER ENDPOINTS
     // ==========================================
 
-    @Query("listteamattendancepm")
+    @Query("listTeamAttendancePM")
     @RolesAllowed("PROJECT_MANAGER")
     public AttendancePageOutput listTeamAttendancePM(
             @Name("userIds") java.util.List<UUID> userIds,
@@ -316,6 +344,9 @@ public class AssistanceQueryResolver {
                 + ", status: " + status 
                 + ", page: " + page 
                 + ", size: " + size);
+
+        // [IDOR PATCH] Validate PM owns the requested project
+        validatePmOwnership(projectId);
 
         LocalDate from = fromDate != null ? LocalDate.parse(fromDate) : null;
         LocalDate to = toDate != null ? LocalDate.parse(toDate) : null;
@@ -344,7 +375,7 @@ public class AssistanceQueryResolver {
         return output;
     }
 
-    @Query("listteamjustificationspm")
+    @Query("listTeamJustificationsPM")
     @RolesAllowed("PROJECT_MANAGER")
     public JustificationPageOutput listTeamJustificationsPM(
             @Name("userIds") java.util.List<UUID> userIds,
@@ -387,7 +418,7 @@ public class AssistanceQueryResolver {
         return output;
     }
 
-    @Query("getjustificationdetailpm")
+    @Query("getJustificationDetailPM")
     public JustificationOutput getJustificationDetailPM(@Name("id") UUID id) {
         UUID currentUserId = authContext.getUserId();
         String currentRole = authContext.getRole();
@@ -436,7 +467,7 @@ public class AssistanceQueryResolver {
         return output;
     }
 
-    @Query("getdashboardpminternal")
+    @Query("getDashboardPMInternal")
     @RolesAllowed("PROJECT_MANAGER")
     public DashboardOutput getDashboardPMInternal(
             @Name("userIds") java.util.List<UUID> userIds,
@@ -450,6 +481,9 @@ public class AssistanceQueryResolver {
                 + ", projectId: " + projectId 
                 + ", fromDate: " + fromDate 
                 + ", toDate: " + toDate);
+
+        // [IDOR PATCH] Validate PM owns the requested project
+        validatePmOwnership(projectId);
 
         LocalDate from = fromDate != null ? LocalDate.parse(fromDate) : null;
         LocalDate to = toDate != null ? LocalDate.parse(toDate) : null;
