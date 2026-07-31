@@ -13,8 +13,10 @@ public class OutboxRepository implements PanacheRepositoryBase<OutboxEventEntity
 
     private static final Logger LOG = Logger.getLogger(OutboxRepository.class);
 
-    public List<OutboxEventEntity> findUnpublished() {
-        List<OutboxEventEntity> results = list("published", false);
+    public List<OutboxEventEntity> findUnpublished(int limit) {
+        List<OutboxEventEntity> results = find("published = false ORDER BY createdAt")
+                .page(0, limit)
+                .list();
         if (!results.isEmpty()) {
             LOG.infof("[OUTBOX] Found %d unpublished events", results.size());
         }

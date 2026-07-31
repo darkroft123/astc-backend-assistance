@@ -37,8 +37,25 @@ public class OutboxEventEntity {
     @Column(name = "published_at")
     private LocalDateTime publishedAt;
 
+    @Column(name = "attempts", nullable = false)
+    @Builder.Default
+    private Integer attempts = 0;
+
+    @Column(name = "last_error", length = 500)
+    private String lastError;
+
+    @Column(name = "status", nullable = false, length = 20)
+    @Builder.Default
+    private String status = "PENDING";
+
     @PrePersist
     public void prePersist() {
         this.createdAt = Instant.now().atZone(ZoneOffset.UTC).toLocalDateTime();
+        if (this.attempts == null) {
+            this.attempts = 0;
+        }
+        if (this.status == null || this.status.isBlank()) {
+            this.status = "PENDING";
+        }
     }
 }

@@ -24,7 +24,6 @@ import io.vertx.core.json.JsonObject;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
-import jakarta.transaction.Transactional;
 
 @ApplicationScoped
 public class OutboxEventProcessor {
@@ -121,6 +120,12 @@ public class OutboxEventProcessor {
     @ConfigProperty(name = "event.notification.default.email", defaultValue = "dev-notification@astc.local")
     String defaultEmail;
 
+    @ConfigProperty(name = "event.outbox.batch-size", defaultValue = "50")
+    int batchSize;
+
+    @ConfigProperty(name = "event.outbox.max-attempts", defaultValue = "10")
+    int maxAttempts;
+
     @Inject
     Vertx vertx;
 
@@ -139,9 +144,8 @@ public class OutboxEventProcessor {
         ));
     }
 
-    @Transactional
     void processEvents() {
-        List<OutboxEventEntity> events = outboxRepository.findUnpublished();
+        List<OutboxEventEntity> events = outboxRepository.findUnpublished(batchSize);
         if (events.isEmpty()) {
             return;
         }
@@ -150,26 +154,58 @@ public class OutboxEventProcessor {
 
         for (OutboxEventEntity event : events) {
             try {
-                LOG.infof("📬 [Outbox] Processing event ID=%s, type=%s, payload=%s", 
-                        event.getId(), event.getEventType(), event.getPayload());
-                JsonObject notificationMsg = mapToNotification(event);
-                if (notificationMsg != null) {
-                    LOG.infof("📬 [Outbox] Dispatching payload to RabbitMQ channel 'notification-events': %s", notificationMsg.encode());
-                    notificationEmitter.send(notificationMsg.encode());
-                    LOG.infof("✅ [Outbox] Successfully published outbox event %s (type=%s) as %s to=%s",
-                            event.getId(), event.getEventType(),
-                            notificationMsg.getString("notificationCode"),
-                            notificationMsg.getString("toEmail"));
-                } else {
-                    LOG.warnf("⚠ [Outbox] Event %s mapped to a null notification payload", event.getId());
-                }
-                event.setPublished(true);
-                event.setPublishedAt(LocalDateTime.now());
+                io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> {
+                    LOG.infof("📬 [Outbox] Processing event ID=%s, type=%s, payload=%s",
+                            event.getId(), event.getEventType(), event.getPayload());
+                    JsonObject notificationMsg = mapToNotification(event);
+                    if (notificationMsg != null) {
+                        notificationEmitter.send(notificationMsg.encode());
+                        LOG.infof("✅ [Outbox] Successfully published outbox event %s (type=%s) as %s to=%s",
+                                event.getId(), event.getEventType(),
+                                notificationMsg.getString("notificationCode"),
+                                notificationMsg.getString("toEmail"));
+                    } else {
+                        LOG.warnf("⚠ [Outbox] Event %s mapped to a null notification payload, marking as processed", event.getId());
+                    }
+                    markPublished(event);
+                });
             } catch (Exception e) {
                 LOG.errorf(e, "❌ [Outbox] Failed to process outbox event %s (type=%s)",
                         event.getId(), event.getEventType());
+                try {
+                    io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> markFailedAttempt(event));
+                } catch (Exception ex) {
+                    LOG.errorf(ex, "❌ [Outbox] Failed to record failed attempt for event %s", event.getId());
+                }
             }
         }
+    }
+
+    private void markPublished(OutboxEventEntity event) {
+        outboxRepository.findByIdOptional(event.getId()).ifPresent(managed -> {
+            managed.setPublished(true);
+            managed.setPublishedAt(LocalDateTime.now());
+            managed.setLastError(null);
+            managed.setStatus("PUBLISHED");
+        });
+    }
+
+    private void markFailedAttempt(OutboxEventEntity event) {
+        outboxRepository.findByIdOptional(event.getId()).ifPresent(managed -> {
+            int attempts = managed.getAttempts() == null ? 0 : managed.getAttempts();
+            managed.setAttempts(attempts + 1);
+            if (attempts + 1 >= maxAttempts) {
+                LOG.errorf("💀 [Outbox] Event %s exceeded max attempts (%d), marking as FAILED",
+                        event.getId(), maxAttempts);
+                managed.setPublished(true);
+                managed.setPublishedAt(LocalDateTime.now());
+                managed.setStatus("FAILED");
+                managed.setLastError("Exceeded max attempts");
+            } else {
+                managed.setStatus("PENDING");
+                managed.setLastError("Processing error, retry pending");
+            }
+        });
     }
 
     private void enrichUserDetails(JsonObject payload, String userId) {

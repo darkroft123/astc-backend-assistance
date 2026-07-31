@@ -15,6 +15,7 @@ import com.smms.assistance.shared.util.TimezoneService;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
 
 import org.eclipse.microprofile.graphql.GraphQLApi;
 import org.eclipse.microprofile.graphql.Name;
@@ -467,6 +468,9 @@ public class AssistanceQueryResolver {
         return output;
     }
 
+    @Inject
+    EntityManager entityManager;
+
     @Query("getDashboardPMInternal")
     @RolesAllowed("PROJECT_MANAGER")
     public DashboardOutput getDashboardPMInternal(
@@ -488,9 +492,27 @@ public class AssistanceQueryResolver {
         LocalDate from = fromDate != null ? LocalDate.parse(fromDate) : null;
         LocalDate to = toDate != null ? LocalDate.parse(toDate) : null;
 
-        int totalAttendances = (int) attendanceRepository.countByUsers(userIds, projectId, from, to, null);
-        int totalAbsences = (int) absenceRepository.countByUsers(userIds, projectId, from, to, null, null);
-        int pendingJustifications = (int) justificationRepository.countByUsers(userIds, "SUBMITTED", from, to);
+        int totalAttendances = 0;
+        int totalAbsences = 0;
+        int pendingJustifications = 0;
+
+        if (userIds != null && !userIds.isEmpty()) {
+            String sql = "SELECT " +
+                    "(SELECT COUNT(id) FROM attendances WHERE user_id IN :userIds AND (:projectId IS NULL OR project_id = :projectId) AND (CAST(:from AS date) IS NULL OR date >= CAST(:from AS date)) AND (CAST(:to AS date) IS NULL OR date <= CAST(:to AS date))), " +
+                    "(SELECT COUNT(id) FROM absences WHERE user_id IN :userIds AND (:projectId IS NULL OR project_id = :projectId) AND (CAST(:from AS date) IS NULL OR date >= CAST(:from AS date)) AND (CAST(:to AS date) IS NULL OR date <= CAST(:to AS date))), " +
+                    "(SELECT COUNT(id) FROM justifications WHERE user_id IN :userIds AND status = 'SUBMITTED' AND (CAST(:from AS date) IS NULL OR date >= CAST(:from AS date)) AND (CAST(:to AS date) IS NULL OR date <= CAST(:to AS date)))";
+
+            Object[] result = (Object[]) entityManager.createNativeQuery(sql)
+                    .setParameter("userIds", userIds)
+                    .setParameter("projectId", projectId)
+                    .setParameter("from", from)
+                    .setParameter("to", to)
+                    .getSingleResult();
+
+            totalAttendances = ((Number) result[0]).intValue();
+            totalAbsences = ((Number) result[1]).intValue();
+            pendingJustifications = ((Number) result[2]).intValue();
+        }
 
         System.out.println("[Assistance PM API] [Query] GetDashboardPMInternal summary -> Attendances: " + totalAttendances 
                 + ", Absences: " + totalAbsences 

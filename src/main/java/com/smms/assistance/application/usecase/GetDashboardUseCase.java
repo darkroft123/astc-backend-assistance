@@ -7,6 +7,7 @@ import com.smms.assistance.infrastructure.repository.AttendanceRepository;
 import com.smms.assistance.infrastructure.repository.JustificationRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
 
 import java.time.LocalDate;
 import java.util.UUID;
@@ -26,30 +27,27 @@ public class GetDashboardUseCase implements GetDashboardPort {
     @Inject
     GenerateAbsenceIfNeededUseCase generateAbsenceIfNeededUseCase;
 
+    @Inject
+    EntityManager entityManager;
+
     @Override
     public DashboardSummary execute(UUID userId, LocalDate fromDate, LocalDate toDate) {
 
-        // generateAbsenceIfNeededUseCase.execute(userId); // Desactivado para evitar generar falta en el primer login
+        String sql = "SELECT " +
+                "(SELECT COUNT(id) FROM attendances WHERE user_id = :userId AND (CAST(:fromDate AS date) IS NULL OR date >= CAST(:fromDate AS date)) AND (CAST(:toDate AS date) IS NULL OR date <= CAST(:toDate AS date))) as att_count, " +
+                "(SELECT COUNT(id) FROM absences WHERE user_id = :userId AND (CAST(:fromDate AS date) IS NULL OR date >= CAST(:fromDate AS date)) AND (CAST(:toDate AS date) IS NULL OR date <= CAST(:toDate AS date))) as abs_count, " +
+                "(SELECT COUNT(id) FROM justifications WHERE user_id = :userId AND status = 'PENDING' AND (CAST(:fromDate AS date) IS NULL OR date >= CAST(:fromDate AS date)) AND (CAST(:toDate AS date) IS NULL OR date <= CAST(:toDate AS date))) as just_count";
+
+        Object[] result = (Object[]) entityManager.createNativeQuery(sql)
+                .setParameter("userId", userId)
+                .setParameter("fromDate", fromDate)
+                .setParameter("toDate", toDate)
+                .getSingleResult();
 
         return DashboardSummary.builder()
-                .totalAttendances((int) attendanceRepository.countByUser(
-                        userId,
-                        null,
-                        fromDate,
-                        toDate,
-                        null))
-                .totalAbsences((int) absenceRepository.countByUser(
-                        userId,
-                        null,
-                        fromDate,
-                        toDate,
-                        null,
-                        null))
-                .pendingJustifications((int) justificationRepository.countByUser(
-                        userId,
-                        "PENDING",
-                        fromDate,
-                        toDate))
+                .totalAttendances(((Number) result[0]).intValue())
+                .totalAbsences(((Number) result[1]).intValue())
+                .pendingJustifications(((Number) result[2]).intValue())
                 .build();
     }
 }
