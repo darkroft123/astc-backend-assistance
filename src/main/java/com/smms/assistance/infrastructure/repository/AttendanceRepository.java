@@ -1,8 +1,8 @@
 package com.smms.assistance.infrastructure.repository;
 
 import com.smms.assistance.domain.entity.AttendanceEntity;
+import com.smms.assistance.domain.model.Page;
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
-import io.quarkus.panache.common.Page;
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
 
@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.ArrayList;
 
 @ApplicationScoped
 public class AttendanceRepository implements PanacheRepositoryBase<AttendanceEntity, UUID> {
@@ -46,7 +47,7 @@ public class AttendanceRepository implements PanacheRepositoryBase<AttendanceEnt
         }
 
         return find(query.toString(), Sort.by("date").descending(), params)
-                .page(Page.of(page, size))
+                .page(io.quarkus.panache.common.Page.of(page, size))
                 .list();
     }
 
@@ -88,7 +89,7 @@ public class AttendanceRepository implements PanacheRepositoryBase<AttendanceEnt
     public List<AttendanceEntity> findRecentByUser(UUID userId, int limit) {
         return find("userId = :userId", Sort.by("date").descending(),
                 Map.of("userId", userId))
-                .page(Page.of(0, limit))
+                .page(io.quarkus.panache.common.Page.of(0, limit))
                 .list();
     }
 
@@ -100,8 +101,6 @@ public class AttendanceRepository implements PanacheRepositoryBase<AttendanceEnt
             String status,
             int page,
             int size) {
-
-        System.out.println("[Assistance PM API] [DB Query] findByUsers starting -> userIds: " + userIds + ", projectId: " + projectId + ", status: " + status + ", page: " + page + ", size: " + size);
 
         StringBuilder query = new StringBuilder("1 = 1");
         Map<String, Object> params = new HashMap<>();
@@ -130,12 +129,9 @@ public class AttendanceRepository implements PanacheRepositoryBase<AttendanceEnt
             params.put("status", status);
         }
 
-        List<AttendanceEntity> result = find(query.toString(), Sort.by("date").descending(), params)
-                .page(Page.of(page, size))
+        return find(query.toString(), Sort.by("date").descending(), params)
+                .page(io.quarkus.panache.common.Page.of(page, size))
                 .list();
-
-        System.out.println("[Assistance PM API] [DB Query] findByUsers completed -> matched records: " + result.size());
-        return result;
     }
 
     public long countByUsers(
@@ -144,8 +140,6 @@ public class AttendanceRepository implements PanacheRepositoryBase<AttendanceEnt
             LocalDate from,
             LocalDate to,
             String status) {
-
-        System.out.println("[Assistance PM API] [DB Query] countByUsers starting -> userIds: " + userIds + ", projectId: " + projectId + ", status: " + status);
 
         StringBuilder query = new StringBuilder("1 = 1");
         Map<String, Object> params = new HashMap<>();
@@ -174,8 +168,191 @@ public class AttendanceRepository implements PanacheRepositoryBase<AttendanceEnt
             params.put("status", status);
         }
 
-        long count = count(query.toString(), params);
-        System.out.println("[Assistance PM API] [DB Query] countByUsers completed -> total count: " + count);
-        return count;
+        return count(query.toString(), params);
+    }
+    
+    // NEW NATIVE QUERY IMPLEMENTATIONS
+    public Page<AttendanceEntity> findPageByUserNative(
+            UUID userId,
+            UUID projectId,
+            LocalDate from,
+            LocalDate to,
+            String status,
+            int page,
+            int size) {
+            
+        long oldStart = System.currentTimeMillis();
+        findByUser(userId, projectId, from, to, status, page, size);
+        countByUser(userId, projectId, from, to, status);
+        long oldTime = System.currentTimeMillis() - oldStart;
+
+        long newStart = System.currentTimeMillis();
+        
+        StringBuilder sql = new StringBuilder(
+            "SELECT CAST(a.id AS VARCHAR), CAST(a.user_id AS VARCHAR), CAST(a.project_id AS VARCHAR), " +
+            "a.date, a.check_in, a.check_out, a.status, a.latitude, a.longitude, " +
+            "a.photo_url, a.project_timezone, a.created_at, a.updated_at, " +
+            "COUNT(*) OVER() " +
+            "FROM attendances a WHERE a.user_id = :userId"
+        );
+        Map<String, Object> params = new HashMap<>();
+        params.put("userId", userId);
+
+        if (projectId != null) {
+            sql.append(" AND a.project_id = :projectId");
+            params.put("projectId", projectId);
+        }
+        if (from != null) {
+            sql.append(" AND a.date >= :from");
+            params.put("from", from);
+        }
+        if (to != null) {
+            sql.append(" AND a.date <= :to");
+            params.put("to", to);
+        }
+        if (status != null && !status.isBlank()) {
+            sql.append(" AND a.status = :status");
+            params.put("status", status);
+        }
+
+        sql.append(" ORDER BY a.date DESC LIMIT :limit OFFSET :offset");
+        params.put("limit", size);
+        params.put("offset", page * size);
+
+        var nativeQuery = getEntityManager().createNativeQuery(sql.toString());
+        for (Map.Entry<String, Object> entry : params.entrySet()) {
+            nativeQuery.setParameter(entry.getKey(), entry.getValue());
+        }
+
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = nativeQuery.getResultList();
+        
+        long newTime = System.currentTimeMillis() - newStart;
+        System.out.println(String.format("[PERF] findPageByUserNative (attendance) -> JPQL (2 queries): %d ms | Native (1 query OVER): %d ms", oldTime, newTime));
+
+        long totalCount = 0;
+        List<AttendanceEntity> mapped = new ArrayList<>();
+        
+        for (Object[] row : rows) {
+            if (totalCount == 0) {
+                totalCount = ((Number) row[13]).longValue();
+            }
+            AttendanceEntity entity = new AttendanceEntity();
+            entity.setId(row[0] != null ? java.util.UUID.fromString(row[0].toString()) : null);
+            entity.setUserId(row[1] != null ? java.util.UUID.fromString(row[1].toString()) : null);
+            entity.setProjectId(row[2] != null ? java.util.UUID.fromString(row[2].toString()) : null);
+            
+            if (row[3] != null) entity.setDate(((java.sql.Date) row[3]).toLocalDate());
+            if (row[4] != null) entity.setCheckIn(((java.sql.Time) row[4]).toLocalTime());
+            if (row[5] != null) entity.setCheckOut(((java.sql.Time) row[5]).toLocalTime());
+            
+            entity.setStatus((String) row[6]);
+            if (row[7] != null) entity.setLatitude(((Number) row[7]).doubleValue());
+            if (row[8] != null) entity.setLongitude(((Number) row[8]).doubleValue());
+            entity.setPhotoUrl((String) row[9]);
+            entity.setProjectTimezone((String) row[10]);
+            
+            if (row[11] != null) entity.setCreatedAt(((java.sql.Timestamp) row[11]).toLocalDateTime());
+            if (row[12] != null) entity.setUpdatedAt(((java.sql.Timestamp) row[12]).toLocalDateTime());
+            
+            mapped.add(entity);
+        }
+        
+        return new Page<>(mapped, totalCount, page, size);
+    }
+    
+    public Page<AttendanceEntity> findPageByUsersNative(
+            List<UUID> userIds,
+            UUID projectId,
+            LocalDate from,
+            LocalDate to,
+            String status,
+            int page,
+            int size) {
+            
+        long oldStart = System.currentTimeMillis();
+        findByUsers(userIds, projectId, from, to, status, page, size);
+        countByUsers(userIds, projectId, from, to, status);
+        long oldTime = System.currentTimeMillis() - oldStart;
+
+        long newStart = System.currentTimeMillis();
+        
+        StringBuilder sql = new StringBuilder(
+            "SELECT CAST(a.id AS VARCHAR), CAST(a.user_id AS VARCHAR), CAST(a.project_id AS VARCHAR), " +
+            "a.date, a.check_in, a.check_out, a.status, a.latitude, a.longitude, " +
+            "a.photo_url, a.project_timezone, a.created_at, a.updated_at, " +
+            "COUNT(*) OVER() " +
+            "FROM attendances a WHERE 1=1"
+        );
+        Map<String, Object> params = new HashMap<>();
+
+        if (userIds != null && !userIds.isEmpty()) {
+            sql.append(" AND a.user_id IN (:userIds)");
+            params.put("userIds", userIds);
+        } else {
+            sql.append(" AND 1=0");
+        }
+
+        if (projectId != null) {
+            sql.append(" AND a.project_id = :projectId");
+            params.put("projectId", projectId);
+        }
+        if (from != null) {
+            sql.append(" AND a.date >= :from");
+            params.put("from", from);
+        }
+        if (to != null) {
+            sql.append(" AND a.date <= :to");
+            params.put("to", to);
+        }
+        if (status != null && !status.isBlank()) {
+            sql.append(" AND a.status = :status");
+            params.put("status", status);
+        }
+
+        sql.append(" ORDER BY a.date DESC LIMIT :limit OFFSET :offset");
+        params.put("limit", size);
+        params.put("offset", page * size);
+
+        var nativeQuery = getEntityManager().createNativeQuery(sql.toString());
+        for (Map.Entry<String, Object> entry : params.entrySet()) {
+            nativeQuery.setParameter(entry.getKey(), entry.getValue());
+        }
+
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = nativeQuery.getResultList();
+        
+        long newTime = System.currentTimeMillis() - newStart;
+        System.out.println(String.format("[PERF] findPageByUsersNative (attendance) -> JPQL (2 queries): %d ms | Native (1 query OVER): %d ms", oldTime, newTime));
+
+        long totalCount = 0;
+        List<AttendanceEntity> mapped = new ArrayList<>();
+        
+        for (Object[] row : rows) {
+            if (totalCount == 0) {
+                totalCount = ((Number) row[13]).longValue();
+            }
+            AttendanceEntity entity = new AttendanceEntity();
+            entity.setId(row[0] != null ? java.util.UUID.fromString(row[0].toString()) : null);
+            entity.setUserId(row[1] != null ? java.util.UUID.fromString(row[1].toString()) : null);
+            entity.setProjectId(row[2] != null ? java.util.UUID.fromString(row[2].toString()) : null);
+            
+            if (row[3] != null) entity.setDate(((java.sql.Date) row[3]).toLocalDate());
+            if (row[4] != null) entity.setCheckIn(((java.sql.Time) row[4]).toLocalTime());
+            if (row[5] != null) entity.setCheckOut(((java.sql.Time) row[5]).toLocalTime());
+            
+            entity.setStatus((String) row[6]);
+            if (row[7] != null) entity.setLatitude(((Number) row[7]).doubleValue());
+            if (row[8] != null) entity.setLongitude(((Number) row[8]).doubleValue());
+            entity.setPhotoUrl((String) row[9]);
+            entity.setProjectTimezone((String) row[10]);
+            
+            if (row[11] != null) entity.setCreatedAt(((java.sql.Timestamp) row[11]).toLocalDateTime());
+            if (row[12] != null) entity.setUpdatedAt(((java.sql.Timestamp) row[12]).toLocalDateTime());
+            
+            mapped.add(entity);
+        }
+        
+        return new Page<>(mapped, totalCount, page, size);
     }
 }

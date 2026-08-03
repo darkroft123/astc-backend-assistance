@@ -145,7 +145,15 @@ public class OutboxEventProcessor {
     }
 
     void processEvents() {
-        List<OutboxEventEntity> events = outboxRepository.findUnpublished(batchSize);
+        List<OutboxEventEntity> events;
+        try {
+            events = io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().call(() -> 
+                outboxRepository.findUnpublished(batchSize)
+            );
+        } catch (Exception e) {
+            LOG.error("Failed to fetch outbox events", e);
+            return;
+        }
         if (events.isEmpty()) {
             return;
         }

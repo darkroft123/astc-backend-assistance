@@ -1,8 +1,8 @@
 package com.smms.assistance.infrastructure.repository;
 
 import com.smms.assistance.domain.entity.AbsenceEntity;
+import com.smms.assistance.domain.model.Page;
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
-import io.quarkus.panache.common.Page;
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.time.LocalDate;
@@ -10,10 +10,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.ArrayList;
 
 @ApplicationScoped
 public class AbsenceRepository implements PanacheRepositoryBase<AbsenceEntity, UUID> {
 
+    // OLD METHODS KEPT FOR TIMING COMPARISON
     public List<AbsenceEntity> findByUser(UUID userId, UUID projectId, LocalDate from, LocalDate to,
                                           String type, Boolean justified,
                                           int page, int size) {
@@ -43,7 +45,7 @@ public class AbsenceRepository implements PanacheRepositoryBase<AbsenceEntity, U
         }
 
         return find(query.toString(), Sort.by("date").descending(), params)
-                .page(Page.of(page, size))
+                .page(io.quarkus.panache.common.Page.of(page, size))
                 .list();
     }
 
@@ -76,50 +78,160 @@ public class AbsenceRepository implements PanacheRepositoryBase<AbsenceEntity, U
 
         return count(query.toString(), params);
     }
+    
+    // NATIVE QUERY - FIND BY USER
+    public Page<AbsenceEntity> findPageByUserNative(UUID userId, UUID projectId, LocalDate from, LocalDate to,
+                                                    String type, Boolean justified, int page, int size) {
+        long oldStart = System.currentTimeMillis();
+        findByUser(userId, projectId, from, to, type, justified, page, size);
+        countByUser(userId, projectId, from, to, type, justified);
+        long oldTime = System.currentTimeMillis() - oldStart;
 
-    public long countByUsers(
-            List<UUID> userIds,
-            UUID projectId,
-            LocalDate from,
-            LocalDate to,
-            String type,
-            Boolean justified) {
+        long newStart = System.currentTimeMillis();
 
-        System.out.println("[Assistance PM API] [DB Query] countByUsers (absences) starting -> userIds: " + userIds + ", projectId: " + projectId + ", justified: " + justified);
-
-        StringBuilder query = new StringBuilder("1 = 1");
+        StringBuilder sql = new StringBuilder(
+            "SELECT CAST(a.id AS VARCHAR), CAST(a.user_id AS VARCHAR), CAST(a.project_id AS VARCHAR), " +
+            "a.date, a.type, a.justified, a.created_at, a.updated_at, " +
+            "COUNT(*) OVER() " +
+            "FROM absences a WHERE a.user_id = :userId"
+        );
         Map<String, Object> params = new HashMap<>();
-
-        if (userIds != null && !userIds.isEmpty()) {
-            query.append(" and userId in :userIds");
-            params.put("userIds", userIds);
-        } else {
-            return 0;
-        }
+        params.put("userId", userId);
 
         if (projectId != null) {
-            query.append(" and projectId = :projectId");
+            sql.append(" AND a.project_id = :projectId");
             params.put("projectId", projectId);
         }
         if (from != null) {
-            query.append(" and date >= :from");
+            sql.append(" AND a.date >= :from");
             params.put("from", from);
         }
         if (to != null) {
-            query.append(" and date <= :to");
+            sql.append(" AND a.date <= :to");
             params.put("to", to);
         }
         if (type != null && !type.isBlank()) {
-            query.append(" and type = :type");
+            sql.append(" AND a.type = :type");
             params.put("type", type);
         }
         if (justified != null) {
-            query.append(" and justified = :justified");
+            sql.append(" AND a.justified = :justified");
             params.put("justified", justified);
         }
 
-        long count = count(query.toString(), params);
-        System.out.println("[Assistance PM API] [DB Query] countByUsers (absences) completed -> total count: " + count);
-        return count;
+        sql.append(" ORDER BY a.date DESC LIMIT :limit OFFSET :offset");
+        params.put("limit", size);
+        params.put("offset", page * size);
+
+        var nativeQuery = getEntityManager().createNativeQuery(sql.toString());
+        for (Map.Entry<String, Object> entry : params.entrySet()) {
+            nativeQuery.setParameter(entry.getKey(), entry.getValue());
+        }
+
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = nativeQuery.getResultList();
+
+        long newTime = System.currentTimeMillis() - newStart;
+        System.out.println(String.format("[PERF] findPageByUserNative (absences) -> JPQL (2 queries): %d ms | Native (1 query OVER): %d ms", oldTime, newTime));
+
+        long totalCount = 0;
+        List<AbsenceEntity> mapped = new ArrayList<>();
+
+        for (Object[] row : rows) {
+            if (totalCount == 0) {
+                totalCount = ((Number) row[8]).longValue();
+            }
+            AbsenceEntity entity = new AbsenceEntity();
+            entity.setId(row[0] != null ? java.util.UUID.fromString(row[0].toString()) : null);
+            entity.setUserId(row[1] != null ? java.util.UUID.fromString(row[1].toString()) : null);
+            entity.setProjectId(row[2] != null ? java.util.UUID.fromString(row[2].toString()) : null);
+            
+            if (row[3] != null) entity.setDate(((java.sql.Date) row[3]).toLocalDate());
+            entity.setType((String) row[4]);
+            if (row[5] != null) entity.setJustified((Boolean) row[5]);
+            
+            if (row[6] != null) entity.setCreatedAt(((java.sql.Timestamp) row[6]).toLocalDateTime());
+            if (row[7] != null) entity.setUpdatedAt(((java.sql.Timestamp) row[7]).toLocalDateTime());
+            
+            mapped.add(entity);
+        }
+        
+        return new Page<>(mapped, totalCount, page, size);
+    }
+    
+    // NATIVE QUERY - FIND BY USERS
+    public Page<AbsenceEntity> findPageByUsersNative(List<UUID> userIds, UUID projectId, LocalDate from, LocalDate to,
+                                                     String type, Boolean justified, int page, int size) {
+        StringBuilder sql = new StringBuilder(
+            "SELECT CAST(a.id AS VARCHAR), CAST(a.user_id AS VARCHAR), CAST(a.project_id AS VARCHAR), " +
+            "a.date, a.type, a.justified, a.created_at, a.updated_at, " +
+            "COUNT(*) OVER() " +
+            "FROM absences a WHERE 1=1"
+        );
+        Map<String, Object> params = new HashMap<>();
+
+        if (userIds != null && !userIds.isEmpty()) {
+            sql.append(" AND a.user_id IN (:userIds)");
+            params.put("userIds", userIds);
+        } else {
+            sql.append(" AND 1=0");
+        }
+
+        if (projectId != null) {
+            sql.append(" AND a.project_id = :projectId");
+            params.put("projectId", projectId);
+        }
+        if (from != null) {
+            sql.append(" AND a.date >= :from");
+            params.put("from", from);
+        }
+        if (to != null) {
+            sql.append(" AND a.date <= :to");
+            params.put("to", to);
+        }
+        if (type != null && !type.isBlank()) {
+            sql.append(" AND a.type = :type");
+            params.put("type", type);
+        }
+        if (justified != null) {
+            sql.append(" AND a.justified = :justified");
+            params.put("justified", justified);
+        }
+
+        sql.append(" ORDER BY a.date DESC LIMIT :limit OFFSET :offset");
+        params.put("limit", size);
+        params.put("offset", page * size);
+
+        var nativeQuery = getEntityManager().createNativeQuery(sql.toString());
+        for (Map.Entry<String, Object> entry : params.entrySet()) {
+            nativeQuery.setParameter(entry.getKey(), entry.getValue());
+        }
+
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = nativeQuery.getResultList();
+
+        long totalCount = 0;
+        List<AbsenceEntity> mapped = new ArrayList<>();
+
+        for (Object[] row : rows) {
+            if (totalCount == 0) {
+                totalCount = ((Number) row[8]).longValue();
+            }
+            AbsenceEntity entity = new AbsenceEntity();
+            entity.setId(row[0] != null ? java.util.UUID.fromString(row[0].toString()) : null);
+            entity.setUserId(row[1] != null ? java.util.UUID.fromString(row[1].toString()) : null);
+            entity.setProjectId(row[2] != null ? java.util.UUID.fromString(row[2].toString()) : null);
+            
+            if (row[3] != null) entity.setDate(((java.sql.Date) row[3]).toLocalDate());
+            entity.setType((String) row[4]);
+            if (row[5] != null) entity.setJustified((Boolean) row[5]);
+            
+            if (row[6] != null) entity.setCreatedAt(((java.sql.Timestamp) row[6]).toLocalDateTime());
+            if (row[7] != null) entity.setUpdatedAt(((java.sql.Timestamp) row[7]).toLocalDateTime());
+            
+            mapped.add(entity);
+        }
+        
+        return new Page<>(mapped, totalCount, page, size);
     }
 }

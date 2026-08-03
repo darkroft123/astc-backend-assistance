@@ -352,16 +352,16 @@ public class AssistanceQueryResolver {
         LocalDate from = fromDate != null ? LocalDate.parse(fromDate) : null;
         LocalDate to = toDate != null ? LocalDate.parse(toDate) : null;
 
-        java.util.List<com.smms.assistance.domain.entity.AttendanceEntity> items = 
-                attendanceRepository.findByUsers(userIds, projectId, from, to, status, page, size);
-        long total = attendanceRepository.countByUsers(userIds, projectId, from, to, status);
+        com.smms.assistance.domain.model.Page<com.smms.assistance.domain.entity.AttendanceEntity> pageData = 
+                attendanceRepository.findPageByUsersNative(userIds, projectId, from, to, status, page, size);
+
+        java.util.List<com.smms.assistance.domain.entity.AttendanceEntity> items = pageData.getItems();
+        long total = pageData.getTotalItems();
 
         long photosCount = items.stream().filter(a -> a.getPhotoUrl() != null && !a.getPhotoUrl().isBlank()).count();
         System.out.println("[Assistance PM API] [Query] ListTeamAttendancePM matched " + items.size() + " records out of " + total + " total. Photos: " + photosCount);
 
-        AttendancePageOutput output = DtoMapper.toAttendancePage(
-                new com.smms.assistance.domain.model.Page<>(items, total, page, size)
-        );
+        AttendancePageOutput output = DtoMapper.toAttendancePage(pageData);
 
         if (output.getItems() != null) {
             for (AttendanceOutput item : output.getItems()) {
@@ -398,15 +398,15 @@ public class AssistanceQueryResolver {
         LocalDate from = fromDate != null ? LocalDate.parse(fromDate) : null;
         LocalDate to = toDate != null ? LocalDate.parse(toDate) : null;
 
-        java.util.List<com.smms.assistance.domain.entity.JustificationEntity> items = 
-                justificationRepository.findByUsers(userIds, status, from, to, page, size);
-        long total = justificationRepository.countByUsers(userIds, status, from, to);
+        com.smms.assistance.domain.model.Page<com.smms.assistance.domain.entity.JustificationEntity> pageData = 
+                justificationRepository.findPageByUsersNative(userIds, status, from, to, page, size);
 
-        System.out.println("[Assistance PM API] [Query] ListTeamJustificationsPM matched " + items.size() + " justifications out of " + total + " total.");
+        java.util.List<com.smms.assistance.domain.entity.JustificationEntity> items = pageData.getItems();
+        long total = pageData.getTotalItems();
 
-        JustificationPageOutput output = DtoMapper.toJustificationPage(
-                new com.smms.assistance.domain.model.Page<>(items, total, page, size)
-        );
+        System.out.println("[Assistance PM API] [Query] ListTeamJustificationsPM matched " + items.size() + " records out of " + total + " total.");
+
+        JustificationPageOutput output = DtoMapper.toJustificationPage(pageData);
 
         if (output.getItems() != null) {
             for (JustificationOutput item : output.getItems()) {

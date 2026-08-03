@@ -23,10 +23,6 @@ public class ListAbsencesUseCase implements ListAbsencesPort {
         LocalDate from = fromDate != null ? LocalDate.parse(fromDate) : null;
         LocalDate to = toDate != null ? LocalDate.parse(toDate) : null;
 
-        List<AbsenceEntity> items = absenceRepository.findByUser(userId, projectId, from, to, type, justified, page,
-                size);
-        long total = absenceRepository.countByUser(userId, projectId, from, to, type, justified);
-
-        return new Page<>(items, total, page, size);
+        return absenceRepository.findPageByUserNative(userId, projectId, from, to, type, justified, page, size);
     }
 }

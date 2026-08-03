@@ -30,7 +30,7 @@ public class ListAttendanceUseCase implements ListAttendancePort {
         LocalDate from = fromDate != null ? LocalDate.parse(fromDate) : null;
         LocalDate to = toDate != null ? LocalDate.parse(toDate) : null;
 
-        List<AttendanceEntity> items = attendanceRepository.findByUser(
+        return attendanceRepository.findPageByUserNative(
                 userId,
                 projectId,
                 from,
@@ -38,14 +38,5 @@ public class ListAttendanceUseCase implements ListAttendancePort {
                 status,
                 page,
                 size);
-
-        long total = attendanceRepository.countByUser(
-                userId,
-                projectId,
-                from,
-                to,
-                status);
-
-        return new Page<>(items, total, page, size);
     }
 }

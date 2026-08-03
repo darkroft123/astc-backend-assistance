@@ -28,20 +28,12 @@ public class ListJustificationsUseCase implements ListJustificationsPort {
         LocalDate from = fromDate != null ? LocalDate.parse(fromDate) : null;
         LocalDate to = toDate != null ? LocalDate.parse(toDate) : null;
 
-        List<JustificationEntity> items = justificationRepository.findByUser(
+        return justificationRepository.findPageByUserNative(
                 userId,
                 status,
                 from,
                 to,
                 page,
                 size);
-
-        long total = justificationRepository.countByUser(
-                userId,
-                status,
-                from,
-                to);
-
-        return new Page<>(items, total, page, size);
     }
 }

@@ -1,8 +1,8 @@
 package com.smms.assistance.infrastructure.repository;
 
 import com.smms.assistance.domain.entity.JustificationEntity;
+import com.smms.assistance.domain.model.Page;
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
-import io.quarkus.panache.common.Page;
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.time.LocalDate;
@@ -11,6 +11,7 @@ import java.util.*;
 @ApplicationScoped
 public class JustificationRepository implements PanacheRepositoryBase<JustificationEntity, UUID> {
 
+    // OLD METHODS KEPT FOR TIMING COMPARISON
     public List<JustificationEntity> findByUser(UUID userId, String status,
             LocalDate from, LocalDate to,
             int page, int size) {
@@ -32,7 +33,7 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
         }
 
         return find(query.toString(), Sort.by("createdAt").descending(), params)
-                .page(Page.of(page, size))
+                .page(io.quarkus.panache.common.Page.of(page, size))
                 .list();
     }
 
@@ -64,7 +65,7 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
     public List<JustificationEntity> findRecentByUser(UUID userId, int limit) {
         return find("userId = :userId", Sort.by("submittedAt").descending(),
                 Map.of("userId", userId))
-                .page(Page.of(0, limit))
+                .page(io.quarkus.panache.common.Page.of(0, limit))
                 .list();
     }
 
@@ -79,8 +80,6 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
             LocalDate to,
             int page,
             int size) {
-
-        System.out.println("[Assistance PM API] [DB Query] findByUsers (justifications) starting -> userIds: " + userIds + ", status: " + status + ", page: " + page + ", size: " + size);
 
         StringBuilder query = new StringBuilder("1 = 1");
         Map<String, Object> params = new HashMap<>();
@@ -105,12 +104,9 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
             params.put("to", to.plusDays(1).atStartOfDay());
         }
 
-        List<JustificationEntity> result = find(query.toString(), Sort.by("createdAt").descending(), params)
-                .page(Page.of(page, size))
+        return find(query.toString(), Sort.by("createdAt").descending(), params)
+                .page(io.quarkus.panache.common.Page.of(page, size))
                 .list();
-
-        System.out.println("[Assistance PM API] [DB Query] findByUsers (justifications) completed -> matched records: " + result.size());
-        return result;
     }
 
     public long countByUsers(
@@ -118,8 +114,6 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
             String status,
             LocalDate from,
             LocalDate to) {
-
-        System.out.println("[Assistance PM API] [DB Query] countByUsers (justifications) starting -> userIds: " + userIds + ", status: " + status);
 
         StringBuilder query = new StringBuilder("1 = 1");
         Map<String, Object> params = new HashMap<>();
@@ -144,8 +138,161 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
             params.put("to", to.plusDays(1).atStartOfDay());
         }
 
-        long count = count(query.toString(), params);
-        System.out.println("[Assistance PM API] [DB Query] countByUsers (justifications) completed -> total count: " + count);
-        return count;
+        return count(query.toString(), params);
+    }
+    
+    // NATIVE QUERIES
+    public Page<JustificationEntity> findPageByUserNative(UUID userId, String status,
+            LocalDate from, LocalDate to,
+            int page, int size) {
+            
+        long oldStart = System.currentTimeMillis();
+        findByUser(userId, status, from, to, page, size);
+        countByUser(userId, status, from, to);
+        long oldTime = System.currentTimeMillis() - oldStart;
+
+        long newStart = System.currentTimeMillis();
+
+        StringBuilder sql = new StringBuilder(
+            "SELECT CAST(j.id AS VARCHAR), CAST(j.user_id AS VARCHAR), CAST(j.absence_id AS VARCHAR), " +
+            "j.status, j.description, j.submitted_at, j.reviewed_at, j.created_at, j.updated_at, " +
+            "COUNT(*) OVER() " +
+            "FROM justifications j WHERE j.user_id = :userId"
+        );
+        Map<String, Object> params = new HashMap<>();
+        params.put("userId", userId);
+
+        if (status != null) {
+            sql.append(" AND j.status = :status");
+            params.put("status", status);
+        }
+        if (from != null) {
+            sql.append(" AND COALESCE(j.submitted_at, j.created_at) >= :from");
+            params.put("from", from.atStartOfDay());
+        }
+        if (to != null) {
+            sql.append(" AND COALESCE(j.submitted_at, j.created_at) <= :to");
+            params.put("to", to.plusDays(1).atStartOfDay());
+        }
+
+        sql.append(" ORDER BY j.created_at DESC LIMIT :limit OFFSET :offset");
+        params.put("limit", size);
+        params.put("offset", page * size);
+
+        var nativeQuery = getEntityManager().createNativeQuery(sql.toString());
+        for (Map.Entry<String, Object> entry : params.entrySet()) {
+            nativeQuery.setParameter(entry.getKey(), entry.getValue());
+        }
+
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = nativeQuery.getResultList();
+
+        long newTime = System.currentTimeMillis() - newStart;
+        System.out.println(String.format("[PERF] findPageByUserNative (justifications) -> JPQL (2 queries): %d ms | Native (1 query OVER): %d ms", oldTime, newTime));
+
+        long totalCount = 0;
+        List<JustificationEntity> mapped = new ArrayList<>();
+
+        for (Object[] row : rows) {
+            if (totalCount == 0) {
+                totalCount = ((Number) row[9]).longValue();
+            }
+            JustificationEntity entity = new JustificationEntity();
+            entity.setId(row[0] != null ? java.util.UUID.fromString(row[0].toString()) : null);
+            entity.setUserId(row[1] != null ? java.util.UUID.fromString(row[1].toString()) : null);
+            entity.setAbsenceId(row[2] != null ? java.util.UUID.fromString(row[2].toString()) : null);
+            
+            entity.setStatus((String) row[3]);
+            entity.setDescription((String) row[4]);
+            
+            if (row[5] != null) entity.setSubmittedAt(((java.sql.Timestamp) row[5]).toLocalDateTime());
+            if (row[6] != null) entity.setReviewedAt(((java.sql.Timestamp) row[6]).toLocalDateTime());
+            if (row[7] != null) entity.setCreatedAt(((java.sql.Timestamp) row[7]).toLocalDateTime());
+            if (row[8] != null) entity.setUpdatedAt(((java.sql.Timestamp) row[8]).toLocalDateTime());
+            
+            mapped.add(entity);
+        }
+        
+        return new Page<>(mapped, totalCount, page, size);
+    }
+    
+    public Page<JustificationEntity> findPageByUsersNative(List<UUID> userIds, String status,
+            LocalDate from, LocalDate to,
+            int page, int size) {
+            
+        long oldStart = System.currentTimeMillis();
+        findByUsers(userIds, status, from, to, page, size);
+        countByUsers(userIds, status, from, to);
+        long oldTime = System.currentTimeMillis() - oldStart;
+
+        long newStart = System.currentTimeMillis();
+
+        StringBuilder sql = new StringBuilder(
+            "SELECT CAST(j.id AS VARCHAR), CAST(j.user_id AS VARCHAR), CAST(j.absence_id AS VARCHAR), " +
+            "j.status, j.description, j.submitted_at, j.reviewed_at, j.created_at, j.updated_at, " +
+            "COUNT(*) OVER() " +
+            "FROM justifications j WHERE 1=1"
+        );
+        Map<String, Object> params = new HashMap<>();
+
+        if (userIds != null && !userIds.isEmpty()) {
+            sql.append(" AND j.user_id IN (:userIds)");
+            params.put("userIds", userIds);
+        } else {
+            sql.append(" AND 1=0");
+        }
+
+        if (status != null) {
+            sql.append(" AND j.status = :status");
+            params.put("status", status);
+        }
+        if (from != null) {
+            sql.append(" AND COALESCE(j.submitted_at, j.created_at) >= :from");
+            params.put("from", from.atStartOfDay());
+        }
+        if (to != null) {
+            sql.append(" AND COALESCE(j.submitted_at, j.created_at) <= :to");
+            params.put("to", to.plusDays(1).atStartOfDay());
+        }
+
+        sql.append(" ORDER BY j.created_at DESC LIMIT :limit OFFSET :offset");
+        params.put("limit", size);
+        params.put("offset", page * size);
+
+        var nativeQuery = getEntityManager().createNativeQuery(sql.toString());
+        for (Map.Entry<String, Object> entry : params.entrySet()) {
+            nativeQuery.setParameter(entry.getKey(), entry.getValue());
+        }
+
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = nativeQuery.getResultList();
+
+        long newTime = System.currentTimeMillis() - newStart;
+        System.out.println(String.format("[PERF] findPageByUsersNative (justifications) -> JPQL (2 queries): %d ms | Native (1 query OVER): %d ms", oldTime, newTime));
+
+        long totalCount = 0;
+        List<JustificationEntity> mapped = new ArrayList<>();
+
+        for (Object[] row : rows) {
+            if (totalCount == 0) {
+                totalCount = ((Number) row[9]).longValue();
+            }
+            JustificationEntity entity = new JustificationEntity();
+            entity.setId(row[0] != null ? java.util.UUID.fromString(row[0].toString()) : null);
+            entity.setUserId(row[1] != null ? java.util.UUID.fromString(row[1].toString()) : null);
+            entity.setAbsenceId(row[2] != null ? java.util.UUID.fromString(row[2].toString()) : null);
+            
+            entity.setStatus((String) row[3]);
+            entity.setDescription((String) row[4]);
+            
+            if (row[5] != null) entity.setSubmittedAt(((java.sql.Timestamp) row[5]).toLocalDateTime());
+            if (row[6] != null) entity.setReviewedAt(((java.sql.Timestamp) row[6]).toLocalDateTime());
+            if (row[7] != null) entity.setCreatedAt(((java.sql.Timestamp) row[7]).toLocalDateTime());
+            if (row[8] != null) entity.setUpdatedAt(((java.sql.Timestamp) row[8]).toLocalDateTime());
+            
+            mapped.add(entity);
+        }
+        
+        return new Page<>(mapped, totalCount, page, size);
     }
 }
