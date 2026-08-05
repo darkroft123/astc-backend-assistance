@@ -138,15 +138,28 @@ public class ProjectManagerClientWrapper {
             Double latitude,
             Double longitude
     ) {
-        LOG.info("📡 Calling Project Manager: createAlert...");
+        String token = (jwt != null) ? jwt.getRawToken() : null;
+        createAlert(userId, projectId, type, detail, latitude, longitude, token);
+    }
+
+    public void createAlert(
+            UUID userId,
+            UUID projectId,
+            String type,
+            String detail,
+            Double latitude,
+            Double longitude,
+            String rawToken
+    ) {
+        LOG.info("📡 Calling Project Manager: createAlert (with explicit token)...");
         long startTime = System.currentTimeMillis();
 
         try {
             var builder = TypesafeGraphQLClientBuilder.newBuilder()
                     .configKey("project-manager-service");
 
-            if (jwt != null && jwt.getRawToken() != null) {
-                builder = builder.header("Authorization", "Bearer " + jwt.getRawToken());
+            if (rawToken != null) {
+                builder = builder.header("Authorization", "Bearer " + rawToken);
             }
 
             ProjectManagerClient client = builder.build(ProjectManagerClient.class);

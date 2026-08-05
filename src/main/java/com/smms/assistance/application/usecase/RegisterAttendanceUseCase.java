@@ -322,8 +322,9 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
         final String finalDateStr = today.toString();
         final String finalCheckInStr = nowTime.toString();
         final boolean isPhotoEmpty = input.getPhotoUrl() == null || input.getPhotoUrl().isBlank();
+        final String rawToken = jwt != null ? jwt.getRawToken() : null;
 
-        executor.runAsync(() -> {
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
             try {
                 // --- ORCHESTRATE NO-PHOTO ALERT ---
                 if (isPhotoEmpty) {
@@ -334,7 +335,8 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
                             "NO_PHOTO",
                             "Asistencia sin foto",
                             finalLat,
-                            finalLng
+                            finalLng,
+                            rawToken
                     );
                 }
 
@@ -373,7 +375,8 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
                                 aiResult.type != null ? aiResult.type : "UNKNOWN",
                                 aiResult.message != null ? aiResult.message : "AI validation flagged anomaly",
                                 finalLat,
-                                finalLng
+                                finalLng,
+                                rawToken
                             );
                         } else {
                             System.out.println("✅ [Orchestrator] Decision: alert ignored (no anomaly detected).");
