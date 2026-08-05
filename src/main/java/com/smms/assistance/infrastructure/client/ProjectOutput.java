@@ -18,13 +18,13 @@ public class ProjectOutput {
     public java.util.List<ProjectMemberOutput> members;
     public java.util.List<String> holidays;
     public String status;
-    public java.time.LocalDate startDate;
-    public java.time.LocalDate endDate;
+    public String startDate;
+    public String endDate;
     public java.math.BigDecimal budget;
     public String currency;
     public String shiftType;
     public UUID responsibleId;
-    public java.time.LocalDateTime createdAt;
+    public String createdAt;
     public String absenceCutoffTime;
     public String description;
 
@@ -117,11 +117,11 @@ public class ProjectOutput {
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     
-    public java.time.LocalDate getStartDate() { return startDate; }
-    public void setStartDate(java.time.LocalDate startDate) { this.startDate = startDate; }
+    public String getStartDate() { return startDate; }
+    public void setStartDate(String startDate) { this.startDate = startDate; }
     
-    public java.time.LocalDate getEndDate() { return endDate; }
-    public void setEndDate(java.time.LocalDate endDate) { this.endDate = endDate; }
+    public String getEndDate() { return endDate; }
+    public void setEndDate(String endDate) { this.endDate = endDate; }
     
     public java.math.BigDecimal getBudget() { return budget; }
     public void setBudget(java.math.BigDecimal budget) { this.budget = budget; }
@@ -135,8 +135,8 @@ public class ProjectOutput {
     public UUID getResponsibleId() { return responsibleId; }
     public void setResponsibleId(UUID responsibleId) { this.responsibleId = responsibleId; }
     
-    public java.time.LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(java.time.LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public String getCreatedAt() { return createdAt; }
+    public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
     
     public String getAbsenceCutoffTime() { return absenceCutoffTime; }
     public void setAbsenceCutoffTime(String absenceCutoffTime) { this.absenceCutoffTime = absenceCutoffTime; }

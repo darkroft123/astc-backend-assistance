@@ -1,6 +1,6 @@
 package com.smms.assistance.infrastructure.client;
 
-import java.time.LocalDateTime;
+
 import java.util.UUID;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 
@@ -11,7 +11,7 @@ public class ProjectMemberOutput {
     public UUID userId;
     public UserOutput user;
     public String role;
-    public LocalDateTime createdAt;
+    public String createdAt;
 
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
@@ -28,6 +28,6 @@ public class ProjectMemberOutput {
     public String getRole() { return role; }
     public void setRole(String role) { this.role = role; }
     
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public String getCreatedAt() { return createdAt; }
+    public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
 }
