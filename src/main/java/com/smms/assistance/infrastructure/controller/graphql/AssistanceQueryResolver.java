@@ -425,25 +425,41 @@ public class AssistanceQueryResolver {
         String currentRole = authContext.getRole();
         System.out.println("[Assistance PM API] [Query] GetJustificationDetailPM initiated by user: " + currentUserId + " (role: " + currentRole + ") -> justificationId: " + id);
 
-        com.smms.assistance.domain.entity.JustificationEntity justification = justificationRepository.findByIdOptional(id)
-                .orElseThrow(() -> new IllegalArgumentException("Justification not found"));
+        Object[] row = justificationRepository.findDetailWithAbsenceNative(id);
+        if (row == null) {
+            throw new IllegalArgumentException("Justification not found");
+        }
 
-        if ("TEAM_MEMBER".equals(currentRole) && !justification.getUserId().equals(currentUserId)) {
+        UUID userId = row[1] != null ? UUID.fromString(row[1].toString()) : null;
+        if ("TEAM_MEMBER".equals(currentRole) && !currentUserId.equals(userId)) {
             throw new SecurityException("Access denied: justification does not belong to you");
         }
 
-        System.out.println("[Assistance PM API] [Query] GetJustificationDetailPM found justification. Status: " + justification.getStatus());
-
-        JustificationOutput output = DtoMapper.toJustificationOutput(justification);
-        if (output.getDocumentUrl() != null && !output.getDocumentUrl().isBlank()) {
-            output.setDocumentUrl(s3StorageAdapter.getPublicUrl(output.getDocumentUrl()));
+        JustificationOutput output = new JustificationOutput();
+        output.setId(row[0] != null ? UUID.fromString(row[0].toString()) : null);
+        output.setUserId(userId);
+        output.setAbsenceId(row[2] != null ? UUID.fromString(row[2].toString()) : null);
+        output.setDescription((String) row[3]);
+        
+        String docUrl = (String) row[4];
+        if (docUrl != null && !docUrl.isBlank()) {
+            output.setDocumentUrl(s3StorageAdapter.getPublicUrl(docUrl));
+        } else {
+            output.setDocumentUrl(null);
         }
 
-        com.smms.assistance.domain.entity.AbsenceEntity absence = absenceRepository.findById(justification.getAbsenceId());
-        if (absence != null) {
-            output.setAbsenceDate(absence.getDate() != null ? absence.getDate().toString() : null);
-            output.setAbsenceType(absence.getType());
+        output.setStatus((String) row[5]);
+        output.setComment((String) row[6]);
+        
+        if (row[7] != null) output.setSubmittedAt(((java.sql.Timestamp) row[7]).toLocalDateTime().toString());
+        if (row[8] != null) output.setReviewedAt(((java.sql.Timestamp) row[8]).toLocalDateTime().toString());
+        output.setReviewedBy(row[9] != null ? UUID.fromString(row[9].toString()) : null);
+
+        // Enrichment with absence info (from LEFT JOIN, no extra DB query!)
+        if (row[12] != null) {
+            output.setAbsenceDate(row[12].toString());
         }
+        output.setAbsenceType((String) row[13]);
 
         System.out.println("[Assistance PM API] [Query] GetJustificationDetailPM enriched with absence info -> absenceDate: " + output.getAbsenceDate() + ", absenceType: " + output.getAbsenceType());
 

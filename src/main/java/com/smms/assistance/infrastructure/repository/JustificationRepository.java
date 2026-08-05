@@ -205,10 +205,10 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
             entity.setStatus((String) row[3]);
             entity.setDescription((String) row[4]);
             
-            if (row[5] != null) entity.setSubmittedAt(((java.sql.Timestamp) row[5]).toLocalDateTime());
-            if (row[6] != null) entity.setReviewedAt(((java.sql.Timestamp) row[6]).toLocalDateTime());
-            if (row[7] != null) entity.setCreatedAt(((java.sql.Timestamp) row[7]).toLocalDateTime());
-            if (row[8] != null) entity.setUpdatedAt(((java.sql.Timestamp) row[8]).toLocalDateTime());
+            entity.setSubmittedAt(toLocalDateTime(row[5]));
+            entity.setReviewedAt(toLocalDateTime(row[6]));
+            entity.setCreatedAt(toLocalDateTime(row[7]));
+            entity.setUpdatedAt(toLocalDateTime(row[8]));
             
             mapped.add(entity);
         }
@@ -285,14 +285,45 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
             entity.setStatus((String) row[3]);
             entity.setDescription((String) row[4]);
             
-            if (row[5] != null) entity.setSubmittedAt(((java.sql.Timestamp) row[5]).toLocalDateTime());
-            if (row[6] != null) entity.setReviewedAt(((java.sql.Timestamp) row[6]).toLocalDateTime());
-            if (row[7] != null) entity.setCreatedAt(((java.sql.Timestamp) row[7]).toLocalDateTime());
-            if (row[8] != null) entity.setUpdatedAt(((java.sql.Timestamp) row[8]).toLocalDateTime());
+            entity.setSubmittedAt(toLocalDateTime(row[5]));
+            entity.setReviewedAt(toLocalDateTime(row[6]));
+            entity.setCreatedAt(toLocalDateTime(row[7]));
+            entity.setUpdatedAt(toLocalDateTime(row[8]));
             
             mapped.add(entity);
         }
         
         return new Page<>(mapped, totalCount, page, size);
+    }
+
+    public Object[] findDetailWithAbsenceNative(UUID id) {
+        long start = System.currentTimeMillis();
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = getEntityManager().createNativeQuery(
+                "SELECT j.id, j.user_id, j.absence_id, j.description, j.document_url, j.status, j.comment, " +
+                "j.submitted_at, j.reviewed_at, j.reviewed_by, j.created_at, j.updated_at, " +
+                "a.date AS absence_date, a.type AS absence_type " +
+                "FROM justifications j " +
+                "LEFT JOIN absences a ON a.id = j.absence_id " +
+                "WHERE j.id = ?1"
+        )
+        .setParameter(1, id)
+        .getResultList();
+
+        long duration = System.currentTimeMillis() - start;
+        System.out.println("[PERF] getJustificationDetailPM (Native LEFT JOIN) -> duration: " + duration + " ms");
+
+        if (rows.isEmpty()) return null;
+        return rows.get(0);
+    }
+
+    private static java.time.LocalDateTime toLocalDateTime(Object val) {
+        if (val == null) return null;
+        if (val instanceof java.time.LocalDateTime) return (java.time.LocalDateTime) val;
+        if (val instanceof java.sql.Timestamp) return ((java.sql.Timestamp) val).toLocalDateTime();
+        if (val instanceof java.util.Date) {
+            return new java.sql.Timestamp(((java.util.Date) val).getTime()).toLocalDateTime();
+        }
+        return java.time.LocalDateTime.parse(val.toString());
     }
 }

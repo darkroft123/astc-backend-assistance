@@ -146,12 +146,12 @@ public class AbsenceRepository implements PanacheRepositoryBase<AbsenceEntity, U
             entity.setUserId(row[1] != null ? java.util.UUID.fromString(row[1].toString()) : null);
             entity.setProjectId(row[2] != null ? java.util.UUID.fromString(row[2].toString()) : null);
             
-            if (row[3] != null) entity.setDate(((java.sql.Date) row[3]).toLocalDate());
+            entity.setDate(toLocalDate(row[3]));
             entity.setType((String) row[4]);
             if (row[5] != null) entity.setJustified((Boolean) row[5]);
             
-            if (row[6] != null) entity.setCreatedAt(((java.sql.Timestamp) row[6]).toLocalDateTime());
-            if (row[7] != null) entity.setUpdatedAt(((java.sql.Timestamp) row[7]).toLocalDateTime());
+            entity.setCreatedAt(toLocalDateTime(row[6]));
+            entity.setUpdatedAt(toLocalDateTime(row[7]));
             
             mapped.add(entity);
         }
@@ -222,16 +222,36 @@ public class AbsenceRepository implements PanacheRepositoryBase<AbsenceEntity, U
             entity.setUserId(row[1] != null ? java.util.UUID.fromString(row[1].toString()) : null);
             entity.setProjectId(row[2] != null ? java.util.UUID.fromString(row[2].toString()) : null);
             
-            if (row[3] != null) entity.setDate(((java.sql.Date) row[3]).toLocalDate());
+            entity.setDate(toLocalDate(row[3]));
             entity.setType((String) row[4]);
             if (row[5] != null) entity.setJustified((Boolean) row[5]);
             
-            if (row[6] != null) entity.setCreatedAt(((java.sql.Timestamp) row[6]).toLocalDateTime());
-            if (row[7] != null) entity.setUpdatedAt(((java.sql.Timestamp) row[7]).toLocalDateTime());
+            entity.setCreatedAt(toLocalDateTime(row[6]));
+            entity.setUpdatedAt(toLocalDateTime(row[7]));
             
             mapped.add(entity);
         }
         
         return new Page<>(mapped, totalCount, page, size);
+    }
+
+    private static java.time.LocalDate toLocalDate(Object val) {
+        if (val == null) return null;
+        if (val instanceof java.time.LocalDate) return (java.time.LocalDate) val;
+        if (val instanceof java.sql.Date) return ((java.sql.Date) val).toLocalDate();
+        if (val instanceof java.util.Date) {
+            return new java.sql.Date(((java.util.Date) val).getTime()).toLocalDate();
+        }
+        return java.time.LocalDate.parse(val.toString());
+    }
+
+    private static java.time.LocalDateTime toLocalDateTime(Object val) {
+        if (val == null) return null;
+        if (val instanceof java.time.LocalDateTime) return (java.time.LocalDateTime) val;
+        if (val instanceof java.sql.Timestamp) return ((java.sql.Timestamp) val).toLocalDateTime();
+        if (val instanceof java.util.Date) {
+            return new java.sql.Timestamp(((java.util.Date) val).getTime()).toLocalDateTime();
+        }
+        return java.time.LocalDateTime.parse(val.toString());
     }
 }

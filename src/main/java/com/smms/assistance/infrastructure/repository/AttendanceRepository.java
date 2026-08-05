@@ -242,9 +242,9 @@ public class AttendanceRepository implements PanacheRepositoryBase<AttendanceEnt
             entity.setUserId(row[1] != null ? java.util.UUID.fromString(row[1].toString()) : null);
             entity.setProjectId(row[2] != null ? java.util.UUID.fromString(row[2].toString()) : null);
             
-            if (row[3] != null) entity.setDate(((java.sql.Date) row[3]).toLocalDate());
-            if (row[4] != null) entity.setCheckIn(((java.sql.Time) row[4]).toLocalTime());
-            if (row[5] != null) entity.setCheckOut(((java.sql.Time) row[5]).toLocalTime());
+            entity.setDate(toLocalDate(row[3]));
+            entity.setCheckIn(toLocalTime(row[4]));
+            entity.setCheckOut(toLocalTime(row[5]));
             
             entity.setStatus((String) row[6]);
             if (row[7] != null) entity.setLatitude(((Number) row[7]).doubleValue());
@@ -252,8 +252,8 @@ public class AttendanceRepository implements PanacheRepositoryBase<AttendanceEnt
             entity.setPhotoUrl((String) row[9]);
             entity.setProjectTimezone((String) row[10]);
             
-            if (row[11] != null) entity.setCreatedAt(((java.sql.Timestamp) row[11]).toLocalDateTime());
-            if (row[12] != null) entity.setUpdatedAt(((java.sql.Timestamp) row[12]).toLocalDateTime());
+            entity.setCreatedAt(toLocalDateTime(row[11]));
+            entity.setUpdatedAt(toLocalDateTime(row[12]));
             
             mapped.add(entity);
         }
@@ -337,9 +337,9 @@ public class AttendanceRepository implements PanacheRepositoryBase<AttendanceEnt
             entity.setUserId(row[1] != null ? java.util.UUID.fromString(row[1].toString()) : null);
             entity.setProjectId(row[2] != null ? java.util.UUID.fromString(row[2].toString()) : null);
             
-            if (row[3] != null) entity.setDate(((java.sql.Date) row[3]).toLocalDate());
-            if (row[4] != null) entity.setCheckIn(((java.sql.Time) row[4]).toLocalTime());
-            if (row[5] != null) entity.setCheckOut(((java.sql.Time) row[5]).toLocalTime());
+            entity.setDate(toLocalDate(row[3]));
+            entity.setCheckIn(toLocalTime(row[4]));
+            entity.setCheckOut(toLocalTime(row[5]));
             
             entity.setStatus((String) row[6]);
             if (row[7] != null) entity.setLatitude(((Number) row[7]).doubleValue());
@@ -347,12 +347,39 @@ public class AttendanceRepository implements PanacheRepositoryBase<AttendanceEnt
             entity.setPhotoUrl((String) row[9]);
             entity.setProjectTimezone((String) row[10]);
             
-            if (row[11] != null) entity.setCreatedAt(((java.sql.Timestamp) row[11]).toLocalDateTime());
-            if (row[12] != null) entity.setUpdatedAt(((java.sql.Timestamp) row[12]).toLocalDateTime());
+            entity.setCreatedAt(toLocalDateTime(row[11]));
+            entity.setUpdatedAt(toLocalDateTime(row[12]));
             
             mapped.add(entity);
         }
         
         return new Page<>(mapped, totalCount, page, size);
+    }
+
+    private static java.time.LocalDate toLocalDate(Object val) {
+        if (val == null) return null;
+        if (val instanceof java.time.LocalDate) return (java.time.LocalDate) val;
+        if (val instanceof java.sql.Date) return ((java.sql.Date) val).toLocalDate();
+        if (val instanceof java.util.Date) {
+            return new java.sql.Date(((java.util.Date) val).getTime()).toLocalDate();
+        }
+        return java.time.LocalDate.parse(val.toString());
+    }
+
+    private static java.time.LocalTime toLocalTime(Object val) {
+        if (val == null) return null;
+        if (val instanceof java.time.LocalTime) return (java.time.LocalTime) val;
+        if (val instanceof java.sql.Time) return ((java.sql.Time) val).toLocalTime();
+        return java.time.LocalTime.parse(val.toString());
+    }
+
+    private static java.time.LocalDateTime toLocalDateTime(Object val) {
+        if (val == null) return null;
+        if (val instanceof java.time.LocalDateTime) return (java.time.LocalDateTime) val;
+        if (val instanceof java.sql.Timestamp) return ((java.sql.Timestamp) val).toLocalDateTime();
+        if (val instanceof java.util.Date) {
+            return new java.sql.Timestamp(((java.util.Date) val).getTime()).toLocalDateTime();
+        }
+        return java.time.LocalDateTime.parse(val.toString());
     }
 }

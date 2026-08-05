@@ -19,8 +19,32 @@ public class ProjectManagerClientWrapper {
     @Inject
     JsonWebToken jwt;
 
+    @Inject
+    @io.quarkus.cache.CacheName("my_projects")
+    io.quarkus.cache.Cache myProjectsCache;
+
     public List<ProjectOutput> getMyProjects() {
-        LOG.info("📡 Calling Project Manager: GetMyProjects...");
+        if (jwt == null || jwt.getSubject() == null) {
+            return getMyProjectsUncached();
+        }
+
+        String userSubject = jwt.getSubject();
+        long start = System.currentTimeMillis();
+        java.util.concurrent.atomic.AtomicBoolean miss = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+        ProjectOutputListWrapper wrapper = myProjectsCache.get(userSubject, key -> {
+            miss.set(true);
+            return new ProjectOutputListWrapper(getMyProjectsUncached());
+        }).await().indefinitely();
+
+        long elapsed = System.currentTimeMillis() - start;
+        LOG.info("[REDIS CACHE " + (miss.get() ? "MISS" : "HIT") + "] my_projects -> " + elapsed + "ms");
+
+        return wrapper != null ? wrapper.projects : List.of();
+    }
+
+    private List<ProjectOutput> getMyProjectsUncached() {
+        LOG.info("📡 Calling Project Manager: GetMyProjects (Uncached)...");
         long startTime = System.currentTimeMillis();
 
         try {

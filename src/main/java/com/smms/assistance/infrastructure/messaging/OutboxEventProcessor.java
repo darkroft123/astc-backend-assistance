@@ -22,6 +22,7 @@ import io.quarkus.runtime.StartupEvent;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.context.control.ActivateRequestContext;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 
@@ -144,6 +145,7 @@ public class OutboxEventProcessor {
         ));
     }
 
+    @ActivateRequestContext
     void processEvents() {
         List<OutboxEventEntity> events;
         try {
@@ -160,12 +162,65 @@ public class OutboxEventProcessor {
 
         LOG.infof("📬 [Outbox] Found %d unpublished outbox events to process", events.size());
 
+        // Extract IDs for batch preloading
+        java.util.Set<UUID> attendanceIds = new java.util.HashSet<>();
+        java.util.Set<UUID> absenceIds = new java.util.HashSet<>();
+        java.util.Set<UUID> justificationIds = new java.util.HashSet<>();
+
+        for (OutboxEventEntity event : events) {
+            try {
+                JsonObject payload = new JsonObject(event.getPayload());
+                String attId = payload.getString("attendanceId");
+                if (attId != null) attendanceIds.add(UUID.fromString(attId));
+                String absId = payload.getString("absenceId");
+                if (absId != null) absenceIds.add(UUID.fromString(absId));
+                String justId = payload.getString("justificationId");
+                if (justId != null) justificationIds.add(UUID.fromString(justId));
+            } catch (Exception e) {
+                // Ignore parsing errors
+            }
+        }
+
+        // Batch load entities
+        java.util.Map<UUID, AttendanceEntity> attendanceMap = new java.util.HashMap<>();
+        if (!attendanceIds.isEmpty()) {
+            try {
+                List<AttendanceEntity> list = io.quarkus.narayana.jta.QuarkusTransaction.requiringNew()
+                        .call(() -> attendanceRepository.find("id in ?1", attendanceIds).list());
+                for (AttendanceEntity a : list) attendanceMap.put(a.getId(), a);
+            } catch (Exception e) {
+                LOG.errorf(e, "Failed to batch load attendance entities for %d ids", attendanceIds.size());
+            }
+        }
+
+        java.util.Map<UUID, AbsenceEntity> absenceMap = new java.util.HashMap<>();
+        if (!absenceIds.isEmpty()) {
+            try {
+                List<AbsenceEntity> list = io.quarkus.narayana.jta.QuarkusTransaction.requiringNew()
+                        .call(() -> absenceRepository.find("id in ?1", absenceIds).list());
+                for (AbsenceEntity a : list) absenceMap.put(a.getId(), a);
+            } catch (Exception e) {
+                LOG.errorf(e, "Failed to batch load absence entities for %d ids", absenceIds.size());
+            }
+        }
+
+        java.util.Map<UUID, JustificationEntity> justificationMap = new java.util.HashMap<>();
+        if (!justificationIds.isEmpty()) {
+            try {
+                List<JustificationEntity> list = io.quarkus.narayana.jta.QuarkusTransaction.requiringNew()
+                        .call(() -> justificationRepository.find("id in ?1", justificationIds).list());
+                for (JustificationEntity j : list) justificationMap.put(j.getId(), j);
+            } catch (Exception e) {
+                LOG.errorf(e, "Failed to batch load justification entities for %d ids", justificationIds.size());
+            }
+        }
+
         for (OutboxEventEntity event : events) {
             try {
                 io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> {
                     LOG.infof("📬 [Outbox] Processing event ID=%s, type=%s, payload=%s",
                             event.getId(), event.getEventType(), event.getPayload());
-                    JsonObject notificationMsg = mapToNotification(event);
+                    JsonObject notificationMsg = mapToNotification(event, attendanceMap, absenceMap, justificationMap);
                     if (notificationMsg != null) {
                         notificationEmitter.send(notificationMsg.encode());
                         LOG.infof("✅ [Outbox] Successfully published outbox event %s (type=%s) as %s to=%s",
@@ -233,7 +288,10 @@ public class OutboxEventProcessor {
         }
     }
 
-    private JsonObject mapToNotification(OutboxEventEntity event) {
+    private JsonObject mapToNotification(OutboxEventEntity event,
+                                        java.util.Map<UUID, AttendanceEntity> attendanceMap,
+                                        java.util.Map<UUID, AbsenceEntity> absenceMap,
+                                        java.util.Map<UUID, JustificationEntity> justificationMap) {
         JsonObject payload = new JsonObject(event.getPayload());
         String userId = payload.getString("userId");
 
@@ -246,35 +304,35 @@ public class OutboxEventProcessor {
 
         switch (event.getEventType()) {
             case "attendance_registered":
-                return buildMessage(event, payload, userId, attendanceTemplateCode);
+                return buildMessage(event, payload, userId, attendanceTemplateCode, attendanceMap);
             case "attendance_early":
-                return buildMessage(event, payload, userId, attendanceEarlyTemplateCode);
+                return buildMessage(event, payload, userId, attendanceEarlyTemplateCode, attendanceMap);
             case "attendance_late":
-                return buildMessage(event, payload, userId, attendanceLateTemplateCode);
+                return buildMessage(event, payload, userId, attendanceLateTemplateCode, attendanceMap);
             case "attendance_outside_hours":
-                return buildMessage(event, payload, userId, attendanceOutsideHoursTemplateCode);
+                return buildMessage(event, payload, userId, attendanceOutsideHoursTemplateCode, attendanceMap);
             case "absence_late":
-                return buildMessage(event, payload, userId, absenceLateTemplateCode);
+                return buildMessage(event, payload, userId, absenceLateTemplateCode, attendanceMap);
             case "absence_late_pm":
-                return buildMessage(event, payload, userId, absenceLatePmTemplateCode);
+                return buildMessage(event, payload, userId, absenceLatePmTemplateCode, attendanceMap);
             case "absence_no_record":
-                return buildMessage(event, payload, userId, absenceNoRecordTemplateCode);
+                return buildMessage(event, payload, userId, absenceNoRecordTemplateCode, attendanceMap);
             case "absence_no_record_pm":
-                return buildMessage(event, payload, userId, absenceNoRecordPmTemplateCode);
+                return buildMessage(event, payload, userId, absenceNoRecordPmTemplateCode, attendanceMap);
             case "checkout_registered":
-                return buildMessage(event, payload, userId, checkoutTemplateCode);
+                return buildMessage(event, payload, userId, checkoutTemplateCode, attendanceMap);
             case "checkout_early":
-                return buildMessage(event, payload, userId, checkoutEarlyTemplateCode);
+                return buildMessage(event, payload, userId, checkoutEarlyTemplateCode, attendanceMap);
             case "absence_early_checkout":
-                return buildMessage(event, payload, userId, absenceEarlyCheckoutTemplateCode);
+                return buildMessage(event, payload, userId, absenceEarlyCheckoutTemplateCode, attendanceMap);
             case "SendNotificationByQueue":
-                return buildJustificationMessage(event, payload, userId, justificationSubmittedTemplateCode);
+                return buildJustificationMessage(event, payload, userId, justificationSubmittedTemplateCode, absenceMap, justificationMap);
             case "justification_submitted":
-                return buildJustificationMessage(event, payload, userId, justificationSubmittedTemplateCode);
+                return buildJustificationMessage(event, payload, userId, justificationSubmittedTemplateCode, absenceMap, justificationMap);
             case "justification_received":
-                return buildJustificationMessage(event, payload, userId, justificationReceivedTemplateCode);
+                return buildJustificationMessage(event, payload, userId, justificationReceivedTemplateCode, absenceMap, justificationMap);
             case "justification_resubmitted":
-                return buildJustificationMessage(event, payload, userId, justificationResubmittedTemplateCode);
+                return buildJustificationMessage(event, payload, userId, justificationResubmittedTemplateCode, absenceMap, justificationMap);
             default:
                 LOG.warnf("Unknown event type '%s' for outbox event %s, skipping",
                         event.getEventType(), event.getId());
@@ -282,14 +340,15 @@ public class OutboxEventProcessor {
         }
     }
 
-    private JsonObject buildMessage(OutboxEventEntity event, JsonObject payload, String userId, String templateCode) {
+    private JsonObject buildMessage(OutboxEventEntity event, JsonObject payload, String userId, String templateCode,
+                                    java.util.Map<UUID, AttendanceEntity> attendanceMap) {
         JsonObject variables = new JsonObject();
         variables.put("USER_ID", userId);
 
         String attendanceId = payload.getString("attendanceId");
         if (attendanceId != null) {
             variables.put("ATTENDANCE_ID", attendanceId);
-            AttendanceEntity attendance = attendanceRepository.findByIdOptional(UUID.fromString(attendanceId)).orElse(null);
+            AttendanceEntity attendance = attendanceMap.get(UUID.fromString(attendanceId));
             if (attendance != null) {
                 if (attendance.getProjectId() != null) {
                     variables.put("PROJECT_ID", attendance.getProjectId().toString());
@@ -313,7 +372,9 @@ public class OutboxEventProcessor {
         return formatEmailMessage(templateCode, userId, toEmail, toName, variables);
     }
 
-    private JsonObject buildJustificationMessage(OutboxEventEntity event, JsonObject payload, String userId, String templateCode) {
+    private JsonObject buildJustificationMessage(OutboxEventEntity event, JsonObject payload, String userId, String templateCode,
+                                                 java.util.Map<UUID, AbsenceEntity> absenceMap,
+                                                 java.util.Map<UUID, JustificationEntity> justificationMap) {
         JsonObject variables = new JsonObject();
         variables.put("USER_ID", userId);
 
@@ -324,7 +385,7 @@ public class OutboxEventProcessor {
         }
         if (absenceId != null) {
             variables.put("ABSENCE_ID", absenceId);
-            AbsenceEntity absence = absenceRepository.findByIdOptional(UUID.fromString(absenceId)).orElse(null);
+            AbsenceEntity absence = absenceMap.get(UUID.fromString(absenceId));
             if (absence != null) {
                 if (absence.getProjectId() != null) {
                     variables.put("PROJECT_ID", absence.getProjectId().toString());
@@ -336,7 +397,7 @@ public class OutboxEventProcessor {
         }
 
         if (justificationId != null) {
-            JustificationEntity justification = justificationRepository.findByIdOptional(UUID.fromString(justificationId)).orElse(null);
+            JustificationEntity justification = justificationMap.get(UUID.fromString(justificationId));
             if (justification != null) {
                 variables.put("STATUS", translateStatus(justification.getStatus()));
             }
@@ -350,6 +411,7 @@ public class OutboxEventProcessor {
 
         return formatEmailMessage(templateCode, userId, toEmail, toName, variables);
     }
+
 
     private JsonObject formatEmailMessage(String notificationCode, String userId, String toEmail, String toName, JsonObject variables) {
         JsonObject msg = new JsonObject();

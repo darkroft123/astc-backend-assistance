@@ -2,7 +2,9 @@ package com.smms.assistance.infrastructure.client;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 
+@RegisterForReflection
 public class ProjectMemberOutput {
     public UUID id;
     public UUID projectId;
