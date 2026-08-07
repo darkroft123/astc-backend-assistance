@@ -514,7 +514,7 @@ public class AssistanceQueryResolver {
 
         if (userIds != null && !userIds.isEmpty()) {
             String sql = "SELECT " +
-                    "(SELECT COUNT(id) FROM attendances WHERE user_id IN :userIds AND (:projectId IS NULL OR project_id = :projectId) AND (CAST(:from AS date) IS NULL OR date >= CAST(:from AS date)) AND (CAST(:to AS date) IS NULL OR date <= CAST(:to AS date))), " +
+                    "(SELECT COUNT(id) FROM attendances WHERE user_id IN :userIds AND status NOT IN ('OUTSIDE_SCHEDULE', 'OUTSIDE_SCHEDULE_CHECKED_OUT') AND (:projectId IS NULL OR project_id = :projectId) AND (CAST(:from AS date) IS NULL OR date >= CAST(:from AS date)) AND (CAST(:to AS date) IS NULL OR date <= CAST(:to AS date))), " +
                     "(SELECT COUNT(id) FROM absences WHERE user_id IN :userIds AND (:projectId IS NULL OR project_id = :projectId) AND (CAST(:from AS date) IS NULL OR date >= CAST(:from AS date)) AND (CAST(:to AS date) IS NULL OR date <= CAST(:to AS date))), " +
                     "(SELECT COUNT(id) FROM justifications WHERE user_id IN :userIds AND status = 'SUBMITTED' AND (CAST(:from AS date) IS NULL OR date >= CAST(:from AS date)) AND (CAST(:to AS date) IS NULL OR date <= CAST(:to AS date)))";
 

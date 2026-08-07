@@ -34,7 +34,7 @@ public class GetDashboardUseCase implements GetDashboardPort {
     public DashboardSummary execute(UUID userId, LocalDate fromDate, LocalDate toDate) {
 
         String sql = "SELECT " +
-                "(SELECT COUNT(id) FROM attendances WHERE user_id = :userId AND (CAST(:fromDate AS date) IS NULL OR date >= CAST(:fromDate AS date)) AND (CAST(:toDate AS date) IS NULL OR date <= CAST(:toDate AS date))) as att_count, " +
+                "(SELECT COUNT(id) FROM attendances WHERE user_id = :userId AND status NOT IN ('OUTSIDE_SCHEDULE', 'OUTSIDE_SCHEDULE_CHECKED_OUT') AND (CAST(:fromDate AS date) IS NULL OR date >= CAST(:fromDate AS date)) AND (CAST(:toDate AS date) IS NULL OR date <= CAST(:toDate AS date))) as att_count, " +
                 "(SELECT COUNT(id) FROM absences WHERE user_id = :userId AND (CAST(:fromDate AS date) IS NULL OR date >= CAST(:fromDate AS date)) AND (CAST(:toDate AS date) IS NULL OR date <= CAST(:toDate AS date))) as abs_count, " +
                 "(SELECT COUNT(j.id) FROM justifications j JOIN absences a ON a.id = j.absence_id " +
                 " WHERE j.user_id = :userId AND j.status = 'PENDING' " +
