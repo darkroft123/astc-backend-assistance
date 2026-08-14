@@ -21,10 +21,6 @@ public class CacheInvalidationController {
     @CacheName("my_projects")
     Cache myProjectsCache;
 
-    @Inject
-    @CacheName("users")
-    Cache usersCache;
-
     @POST
     @Path("/invalidate-projects")
     public Response invalidateProjects(String body) {
@@ -38,24 +34,17 @@ public class CacheInvalidationController {
             LOG.info("📥 [CACHE] Received invalidation request: " + eventType + " for project " + projectId);
 
             if (userIds != null && !userIds.isEmpty()) {
-                // Invalidate only specific users for both caches
+                // Invalidate only specific users
                 LOG.info("🗑️  [CACHE] Invalidating cache for " + userIds.size() + " specific users...");
                 for (Object userIdObj : userIds) {
                     String userId = userIdObj.toString();
-                    
-                    // Invalidate my_projects cache
                     myProjectsCache.invalidate(userId).await().indefinitely();
-                    
-                    // Invalidate users cache
-                    usersCache.invalidate(userId).await().indefinitely();
-                    
                     LOG.info("🗑️  [CACHE] Invalidated cache for user: " + userId);
                 }
             } else {
                 // Fallback: invalidate all if no user IDs provided
                 LOG.info("🗑️  [CACHE] No user IDs provided, invalidating ALL cache entries...");
                 myProjectsCache.invalidateAll().await().indefinitely();
-                usersCache.invalidateAll().await().indefinitely();
             }
 
             LOG.info("✅ [CACHE] Cache invalidation completed successfully");
