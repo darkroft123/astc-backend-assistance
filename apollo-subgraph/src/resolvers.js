@@ -1,242 +1,82 @@
+import { Kind, print, visit } from 'graphql';
 import { callAssistance } from './client.js';
 
+function getLeafTypeName(typeObj) {
+  let t = typeObj;
+  while (t.kind === Kind.NON_NULL_TYPE || t.kind === Kind.LIST_TYPE) {
+    t = t.type;
+  }
+  return t.name.value;
+}
+
+function buildForwardedQuery(info, operation, args) {
+  const parentType = operation === 'mutation' ? info.schema.getMutationType() : info.schema.getQueryType();
+  const fieldDef = parentType?.getFields?.()[info.fieldName];
+  const argTypes = new Map();
+  if (fieldDef) {
+    for (const arg of fieldDef.args) {
+      argTypes.set(arg.name, arg.type.toString());
+    }
+  }
+
+  const usedArgs = Object.keys(args ?? {});
+  const varDefs = usedArgs.map((name) => `$${name}: ${argTypes.get(name) ?? 'String'}`);
+  const varRefs = usedArgs.map((name) => `${name}: $${name}`);
+
+  const fieldNode = info.fieldNodes[0];
+  const selectionSet = fieldNode.selectionSet
+    ? visit(fieldNode.selectionSet, {
+        Field(node) {
+          if (node.name.value === '__typename') {
+            return null;
+          }
+          return undefined;
+        }
+      })
+    : null;
+
+  const selection = selectionSet ? ` ${print(selectionSet)}` : '';
+  const fieldCall = varRefs.length ? `${info.fieldName}(${varRefs.join(', ')})` : info.fieldName;
+  return `${operation}${varDefs.length ? `(${varDefs.join(', ')})` : ''} { ${fieldCall}${selection} }`;
+}
+
+function forward(operation) {
+  return async (_, args, contextValue, info) => {
+    const query = buildForwardedQuery(info, operation, args);
+    const data = await callAssistance(query, args, contextValue.token);
+    return data ? data[info.fieldName] : null;
+  };
+}
+
+const queryOps = [
+  'getDashboard',
+  'getTodayAttendance',
+  'listAttendance',
+  'listAbsences',
+  'listJustifications',
+  'getJustificationStatus',
+  'getJustificationDetailPM',
+  'listTeamJustificationsPM',
+  'getDashboardPMInternal',
+  'listTeamAttendancePM'
+];
+
+const mutationOps = [
+  'registerAttendance',
+  'checkOut',
+  'saveJustification',
+  'editJustification',
+  'submitJustification',
+  'deleteJustification',
+  'justifyAbsence',
+  'requestObservationPM',
+  'approveJustificationPM',
+  'rejectJustificationPM'
+];
+
 export const resolvers = {
-  Query: {
-    async GetDashboard(_, { fromDate, toDate }, contextValue) {
-      const data = await callAssistance(
-        `query($fromDate: String, $toDate: String) {
-          GetDashboard(fromDate: $fromDate, toDate: $toDate) {
-            totalAttendances
-            totalAbsences
-            pendingJustifications
-          }
-        }`,
-        { fromDate, toDate },
-        contextValue.token
-      );
-      return data.GetDashboard;
-    },
-
-    async ListAbsences(_, args, contextValue) {
-      const data = await callAssistance(
-        `query(
-          $page: Int!,
-          $size: Int!,
-          $projectId: String,
-          $fromDate: String,
-          $toDate: String,
-          $type: String,
-          $justified: Boolean
-        ) {
-          ListAbsences(
-            page: $page,
-            size: $size,
-            projectId: $projectId,
-            fromDate: $fromDate,
-            toDate: $toDate,
-            type: $type,
-            justified: $justified
-          ) {
-            items {
-              id
-              userId
-              projectId
-              date
-              type
-              justified
-            }
-            page
-            size
-            total
-          }
-        }`,
-        args,
-        contextValue.token
-      );
-      return data.ListAbsences;
-    },
-
-    async ListAttendance(_, args, contextValue) {
-      const data = await callAssistance(
-        `query(
-          $page: Int!,
-          $size: Int!,
-          $projectId: String,
-          $fromDate: String,
-          $toDate: String,
-          $status: String
-        ) {
-          ListAttendance(
-            page: $page,
-            size: $size,
-            projectId: $projectId,
-            fromDate: $fromDate,
-            toDate: $toDate,
-            status: $status
-          ) {
-            items {
-              id
-              userId
-              projectId
-              date
-              checkIn
-              checkOut
-              status
-              latitude
-              longitude
-              photoUrl
-            }
-            page
-            size
-            total
-          }
-        }`,
-        args,
-        contextValue.token
-      );
-      return data.ListAttendance;
-    },
-
-    async ListJustifications(_, args, contextValue) {
-      const data = await callAssistance(
-        `query(
-          $page: Int!,
-          $size: Int!,
-          $status: String,
-          $fromDate: String,
-          $toDate: String
-        ) {
-          ListJustifications(
-            page: $page,
-            size: $size,
-            status: $status,
-            fromDate: $fromDate,
-            toDate: $toDate
-          ) {
-            items {
-              id
-              absenceId
-              userId
-              description
-              documentUrl
-              status
-              comment
-              submittedAt
-            }
-            page
-            size
-            total
-          }
-        }`,
-        args,
-        contextValue.token
-      );
-      return data.ListJustifications;
-    },
-
-    async GetJustificationStatus(_, { justificationId }, contextValue) {
-      const data = await callAssistance(
-        `query($justificationId: String!) {
-          GetJustificationStatus(justificationId: $justificationId) {
-            justificationId
-            status
-          }
-        }`,
-        { justificationId },
-        contextValue.token
-      );
-      return data.GetJustificationStatus;
-    }
-  },
-
-  Mutation: {
-    async RegisterAttendance(_, { input }, contextValue) {
-      const data = await callAssistance(
-        `mutation($input: RegisterAttendanceInput!) {
-          RegisterAttendance(input: $input) {
-            id
-            userId
-            date
-            checkIn
-            status
-          }
-        }`,
-        { input },
-        contextValue.token
-      );
-      return data.RegisterAttendance;
-    },
-
-    async SaveJustification(_, { input }, contextValue) {
-      const data = await callAssistance(
-        `mutation($input: SaveJustificationInput!) {
-          SaveJustification(input: $input) {
-            id
-            status
-            submittedAt
-          }
-        }`,
-        { input },
-        contextValue.token
-      );
-      return data.SaveJustification;
-    },
-
-    async EditJustification(_, { id, input }, contextValue) {
-      const data = await callAssistance(
-        `mutation($id: UUID!, $input: SaveJustificationInput!) {
-          EditJustification(id: $id, input: $input) {
-            id
-            status
-            submittedAt
-          }
-        }`,
-        { id, input },
-        contextValue.token
-      );
-      return data.EditJustification;
-    },
-
-    async DeleteJustification(_, { id }, contextValue) {
-      const data = await callAssistance(
-        `mutation($id: UUID!) {
-          DeleteJustification(id: $id)
-        }`,
-        { id },
-        contextValue.token
-      );
-      return data.DeleteJustification;
-    },
-
-    async SubmitJustification(_, { id }, contextValue) {
-      const data = await callAssistance(
-        `mutation($id: UUID!) {
-          SubmitJustification(id: $id) {
-            id
-            status
-            submittedAt
-          }
-        }`,
-        { id },
-        contextValue.token
-      );
-      return data.SubmitJustification;
-    },
-
-    async JustifyAbsence(_, { input }, contextValue) {
-      const data = await callAssistance(
-        `mutation($input: JustifyAbsenceInput!) {
-          JustifyAbsence(input: $input) {
-            absenceId
-            valid
-          }
-        }`,
-        { input },
-        contextValue.token
-      );
-      return data.JustifyAbsence;
-    }
-  },
+  Query: Object.fromEntries(queryOps.map((op) => [op, forward('query')])),
+  Mutation: Object.fromEntries(mutationOps.map((op) => [op, forward('mutation')])),
 
   AttendanceOutput: {
     __resolveReference(reference) {
