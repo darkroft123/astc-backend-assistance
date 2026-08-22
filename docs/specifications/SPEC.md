@@ -110,13 +110,14 @@ Roles:
 
 --------------------------------------------------------------------------------
 
-🗄️ BASE DE DATOS (POSTGRESQL + FLYWAY)
+🗄️ BASE DE DATOS (POSTGRESQL + LIQUIBASE)
 --------------------------------------------------------------------------------
 
 Propiedad:
-- Base de datos exclusiva del servicio
+- Base de datos exclusiva del servicio (schema: astc_assistance)
 - No existen foreign keys hacia otros microservicios
 - Las referencias externas (user_id, project_id) son UUID sin relación directa
+- Migraciones gestionadas por Liquibase (contenedor: liquibase-assistance)
 
 --------------------------------------------------------------------------------
 

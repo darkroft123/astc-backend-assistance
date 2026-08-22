@@ -140,10 +140,10 @@ O con Apollo Federation / Schema Stitching:
 
 ## Migraciones
 
-Las migraciones se ejecutan automáticamente con Flyway al iniciar el servicio.
+Las migraciones se ejecutan automáticamente con Liquibase al iniciar el servicio (contenedor: liquibase-assistance).
 Solo incluyen tablas del dominio Assistance.
 
-Ubicación: `src/main/resources/db/migration/`
+Ubicación: `services/astc-db-assistance/migration/changelog/`
 
 ## Eventos de dominio (Transactional Outbox)
 - `attendance_registered` — al registrar asistencia
