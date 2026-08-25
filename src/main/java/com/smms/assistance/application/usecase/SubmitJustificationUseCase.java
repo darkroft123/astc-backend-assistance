@@ -1,9 +1,12 @@
 package com.smms.assistance.application.usecase;
 
 import com.smms.assistance.application.in.SubmitJustificationPort;
+import com.smms.assistance.domain.entity.AbsenceEntity;
 import com.smms.assistance.domain.entity.JustificationEntity;
 import com.smms.assistance.domain.entity.JustificationHistoryEntity;
+import com.smms.assistance.infrastructure.client.ProjectManagerClientWrapper;
 import com.smms.assistance.infrastructure.messaging.OutboxEventPublisher;
+import com.smms.assistance.infrastructure.repository.AbsenceRepository;
 import com.smms.assistance.infrastructure.repository.JustificationRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -17,6 +20,12 @@ public class SubmitJustificationUseCase implements SubmitJustificationPort {
 
     @Inject
     JustificationRepository justificationRepository;
+
+    @Inject
+    AbsenceRepository absenceRepository;
+
+    @Inject
+    ProjectManagerClientWrapper projectManagerClient;
 
     @Inject
     OutboxEventPublisher outboxPublisher;
@@ -71,8 +80,42 @@ public class SubmitJustificationUseCase implements SubmitJustificationPort {
                 )
         );
 
+        notifyProjectManager(entity);
+
         System.out.println("[Justification Flow] SUBMITTED -> " + previousStatus + " -> SUBMITTED -> ID: " + justificationId);
         return entity;
+    }
+
+    private void notifyProjectManager(JustificationEntity entity) {
+        try {
+            UUID projectId = absenceRepository.findByIdOptional(entity.getAbsenceId())
+                    .map(AbsenceEntity::getProjectId)
+                    .orElse(null);
+            if (projectId == null) {
+                return;
+            }
+
+            UUID responsibleId = projectManagerClient.getMyProjects().stream()
+                    .filter(p -> projectId.equals(p.id))
+                    .map(p -> p.responsibleId)
+                    .filter(id -> id != null)
+                    .findFirst()
+                    .orElse(null);
+            if (responsibleId == null) {
+                return;
+            }
+
+            outboxPublisher.publish("Justification", entity.getId(), "justification_received",
+                    String.format(
+                            "{\"justificationId\":\"%s\",\"absenceId\":\"%s\",\"userId\":\"%s\"}",
+                            entity.getId(),
+                            entity.getAbsenceId(),
+                            responsibleId
+                    ));
+        } catch (Exception e) {
+            System.out.println("[Justification Flow] Could not queue PM notification for justification "
+                    + entity.getId() + ": " + e.getMessage());
+        }
     }
 
     private void recordHistory(UUID justificationId, String previousStatus, String newStatus,
