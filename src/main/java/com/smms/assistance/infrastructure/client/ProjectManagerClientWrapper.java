@@ -32,10 +32,17 @@ public class ProjectManagerClientWrapper {
         long start = System.currentTimeMillis();
         java.util.concurrent.atomic.AtomicBoolean miss = new java.util.concurrent.atomic.AtomicBoolean(false);
 
-        ProjectOutputListWrapper wrapper = myProjectsCache.get(userSubject, key -> {
+        ProjectOutputListWrapper wrapper;
+        try {
+            wrapper = myProjectsCache.get(userSubject, key -> {
+                miss.set(true);
+                return new ProjectOutputListWrapper(getMyProjectsUncached());
+            }).await().indefinitely();
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, "[REDIS] Cache unavailable, falling back to direct call", e);
             miss.set(true);
-            return new ProjectOutputListWrapper(getMyProjectsUncached());
-        }).await().indefinitely();
+            wrapper = new ProjectOutputListWrapper(getMyProjectsUncached());
+        }
 
         long elapsed = System.currentTimeMillis() - start;
         LOG.info("[REDIS CACHE " + (miss.get() ? "MISS" : "HIT") + "] my_projects -> " + elapsed + "ms");

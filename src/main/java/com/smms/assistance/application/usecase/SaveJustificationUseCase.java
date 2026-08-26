@@ -5,7 +5,6 @@ import com.smms.assistance.domain.entity.AbsenceEntity;
 import com.smms.assistance.domain.entity.JustificationEntity;
 import com.smms.assistance.domain.entity.JustificationHistoryEntity;
 import com.smms.assistance.infrastructure.controller.graphql.dto.SaveJustificationInput;
-import com.smms.assistance.infrastructure.messaging.OutboxEventPublisher;
 import com.smms.assistance.infrastructure.repository.AbsenceRepository;
 import com.smms.assistance.infrastructure.repository.JustificationRepository;
 import com.smms.assistance.infrastructure.storage.S3StorageAdapter;
@@ -14,7 +13,6 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
 import java.io.ByteArrayInputStream;
-import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.UUID;
 
@@ -25,9 +23,7 @@ public class SaveJustificationUseCase implements SaveJustificationPort {
 
     @Inject JustificationRepository justificationRepository;
     @Inject AbsenceRepository absenceRepository;
-    @Inject OutboxEventPublisher outboxPublisher;
     @Inject S3StorageAdapter s3StorageAdapter;
-    @Inject org.eclipse.microprofile.jwt.JsonWebToken jwt;
 
     @Override
     @Transactional
@@ -94,31 +90,6 @@ public class SaveJustificationUseCase implements SaveJustificationPort {
         justificationRepository.persist(entity);
 
         recordHistory(justificationId, null, "PENDING", "Justification created", userId);
-
-        String userEmail = jwt != null ? jwt.getClaim("email") : null;
-        String userName = jwt != null ? jwt.getClaim("name") : null;
-        if (userEmail == null || userEmail.isBlank()) {
-            userEmail = "";
-        }
-        if (userName == null || userName.isBlank()) {
-            userName = userEmail.contains("@") ? userEmail.split("@")[0] : "Colaborador";
-        }
-        userEmail = userEmail.replace("\"", "\\\"");
-        userName = userName.replace("\"", "\\\"");
-
-        LOG.infof("[OUTBOX] Publishing justification event: justificationId=%s, absenceId=%s, userId=%s",
-                entity.getId(), input.getAbsenceId(), userId);
-        outboxPublisher.publish("Justification", entity.getId(),
-                "SendNotificationByQueue",
-                String.format(
-                        "{\"justificationId\":\"%s\",\"absenceId\":\"%s\",\"userId\":\"%s\",\"userEmail\":\"%s\",\"userName\":\"%s\"}",
-                        entity.getId(),
-                        input.getAbsenceId(),
-                        userId,
-                        userEmail,
-                        userName
-                )
-        );
 
         LOG.infof("[Justification Flow] CREATED -> ID: %s, Status: PENDING", justificationId);
         return entity;
