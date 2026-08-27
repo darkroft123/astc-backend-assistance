@@ -179,14 +179,7 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
 
                 ByteArrayInputStream stream = new ByteArrayInputStream(decoded);
 
-                String folder =
-                        "private/user/"
-                                + userId
-                                + "/assistance/"
-                                + today.getYear()
-                                + "/"
-                                + String.format("%02d", today.getMonthValue());
-
+                String folder = "document/private/user/" + userId + "/photo";
                 String filename = attendanceId + ".jpg";
 
                 String key = s3StorageAdapter.upload(
@@ -198,8 +191,7 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
                 );
 
                 photoUrl = key;
-                alertsPhotoUrl = s3StorageAdapter.generatePresignedUrl(key, 120)
-                        .replace("http://localhost:9010", "http://minio:9000");
+                alertsPhotoUrl = s3StorageAdapter.generateInternalPresignedUrl(key, 120);
 
             } catch (Exception e) {
 

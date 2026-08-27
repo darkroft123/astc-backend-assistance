@@ -326,7 +326,7 @@ public class AssistanceQueryResolver {
     // ==========================================
 
     @Query("listTeamAttendancePM")
-    @RolesAllowed("PROJECT_MANAGER")
+    @RolesAllowed({"PROJECT_MANAGER", "ADMIN"})
     public AttendancePageOutput listTeamAttendancePM(
             @Name("userIds") java.util.List<UUID> userIds,
             @Name("projectId") UUID projectId,
@@ -377,7 +377,7 @@ public class AssistanceQueryResolver {
     }
 
     @Query("listTeamJustificationsPM")
-    @RolesAllowed("PROJECT_MANAGER")
+    @RolesAllowed({"PROJECT_MANAGER", "ADMIN"})
     public JustificationPageOutput listTeamJustificationsPM(
             @Name("userIds") java.util.List<UUID> userIds,
             @Name("status") String status,
@@ -419,6 +419,18 @@ public class AssistanceQueryResolver {
         return output;
     }
 
+    private static String formatDateTime(Object val) {
+        if (val == null) return null;
+        if (val instanceof java.time.LocalDateTime) return val.toString();
+        if (val instanceof java.time.OffsetDateTime) return ((java.time.OffsetDateTime) val).toLocalDateTime().toString();
+        if (val instanceof java.time.Instant) return ((java.time.Instant) val).toString();
+        if (val instanceof java.sql.Timestamp) return ((java.sql.Timestamp) val).toLocalDateTime().toString();
+        if (val instanceof java.util.Date) {
+            return new java.sql.Timestamp(((java.util.Date) val).getTime()).toLocalDateTime().toString();
+        }
+        return val.toString();
+    }
+
     @Query("getJustificationDetailPM")
     public JustificationOutput getJustificationDetailPM(@Name("id") UUID id) {
         UUID currentUserId = authContext.getUserId();
@@ -451,8 +463,8 @@ public class AssistanceQueryResolver {
         output.setStatus((String) row[5]);
         output.setComment((String) row[6]);
         
-        if (row[7] != null) output.setSubmittedAt(((java.sql.Timestamp) row[7]).toLocalDateTime().toString());
-        if (row[8] != null) output.setReviewedAt(((java.sql.Timestamp) row[8]).toLocalDateTime().toString());
+        if (row[7] != null) output.setSubmittedAt(formatDateTime(row[7]));
+        if (row[8] != null) output.setReviewedAt(formatDateTime(row[8]));
         output.setReviewedBy(row[9] != null ? UUID.fromString(row[9].toString()) : null);
 
         // Enrichment with absence info (from LEFT JOIN, no extra DB query!)
@@ -488,7 +500,7 @@ public class AssistanceQueryResolver {
     EntityManager entityManager;
 
     @Query("getDashboardPMInternal")
-    @RolesAllowed("PROJECT_MANAGER")
+    @RolesAllowed({"PROJECT_MANAGER", "ADMIN"})
     public DashboardOutput getDashboardPMInternal(
             @Name("userIds") java.util.List<UUID> userIds,
             @Name("projectId") UUID projectId,
@@ -513,17 +525,60 @@ public class AssistanceQueryResolver {
         int pendingJustifications = 0;
 
         if (userIds != null && !userIds.isEmpty()) {
-            String sql = "SELECT " +
-                    "(SELECT COUNT(id) FROM attendances WHERE user_id IN :userIds AND status NOT IN ('OUTSIDE_SCHEDULE', 'OUTSIDE_SCHEDULE_CHECKED_OUT') AND (:projectId IS NULL OR project_id = :projectId) AND (CAST(:from AS date) IS NULL OR date >= CAST(:from AS date)) AND (CAST(:to AS date) IS NULL OR date <= CAST(:to AS date))), " +
-                    "(SELECT COUNT(id) FROM absences WHERE user_id IN :userIds AND (:projectId IS NULL OR project_id = :projectId) AND (CAST(:from AS date) IS NULL OR date >= CAST(:from AS date)) AND (CAST(:to AS date) IS NULL OR date <= CAST(:to AS date))), " +
-                    "(SELECT COUNT(id) FROM justifications WHERE user_id IN :userIds AND status = 'SUBMITTED' AND (CAST(:from AS date) IS NULL OR date >= CAST(:from AS date)) AND (CAST(:to AS date) IS NULL OR date <= CAST(:to AS date)))";
+            StringBuilder sql = new StringBuilder("SELECT ");
 
-            Object[] result = (Object[]) entityManager.createNativeQuery(sql)
-                    .setParameter("userIds", userIds)
-                    .setParameter("projectId", projectId)
-                    .setParameter("from", from)
-                    .setParameter("to", to)
-                    .getSingleResult();
+            // 1. Attendances
+            sql.append("(SELECT COUNT(id) FROM attendances WHERE user_id IN :userIds AND status NOT IN ('OUTSIDE_SCHEDULE', 'OUTSIDE_SCHEDULE_CHECKED_OUT')");
+            if (projectId != null) {
+                sql.append(" AND project_id = :projectId");
+            }
+            if (from != null) {
+                sql.append(" AND date >= :fromDate");
+            }
+            if (to != null) {
+                sql.append(" AND date <= :toDate");
+            }
+            sql.append("), ");
+
+            // 2. Absences
+            sql.append("(SELECT COUNT(id) FROM absences WHERE user_id IN :userIds");
+            if (projectId != null) {
+                sql.append(" AND project_id = :projectId");
+            }
+            if (from != null) {
+                sql.append(" AND date >= :fromDate");
+            }
+            if (to != null) {
+                sql.append(" AND date <= :toDate");
+            }
+            sql.append("), ");
+
+            // 3. Justifications
+            sql.append("(SELECT COUNT(j.id) FROM justifications j JOIN absences a ON a.id = j.absence_id WHERE j.user_id IN :userIds AND j.status IN ('SUBMITTED', 'PENDING')");
+            if (projectId != null) {
+                sql.append(" AND a.project_id = :projectId");
+            }
+            if (from != null) {
+                sql.append(" AND a.date >= :fromDate");
+            }
+            if (to != null) {
+                sql.append(" AND a.date <= :toDate");
+            }
+            sql.append(")");
+
+            var nativeQuery = entityManager.createNativeQuery(sql.toString())
+                    .setParameter("userIds", userIds);
+            if (projectId != null) {
+                nativeQuery.setParameter("projectId", projectId);
+            }
+            if (from != null) {
+                nativeQuery.setParameter("fromDate", from);
+            }
+            if (to != null) {
+                nativeQuery.setParameter("toDate", to);
+            }
+
+            Object[] result = (Object[]) nativeQuery.getSingleResult();
 
             totalAttendances = ((Number) result[0]).intValue();
             totalAbsences = ((Number) result[1]).intValue();

@@ -124,11 +124,15 @@ public RegisterAttendanceOutput registerAttendance(
     // =========================
     @Mutation("checkOut")
     @RolesAllowed({"TEAM_MEMBER", "PROJECT_MANAGER", "ADMIN"})
-    public RegisterAttendanceOutput checkOut(@Name("projectId") UUID projectId) {
+    public RegisterAttendanceOutput checkOut(
+            @Name("projectId") UUID projectId,
+            @Name("photoUrl") String photoUrl,
+            @Name("latitude") Double latitude,
+            @Name("longitude") Double longitude) {
         UUID userId = authContext.getUserId();
-        LOG.infof("🚀 CheckOut START -> userId=%s projectId=%s", userId, projectId);
+        LOG.infof("🚀 CheckOut START -> userId=%s projectId=%s hasPhoto=%b", userId, projectId, photoUrl != null);
 
-        var result = checkOutPort.execute(userId, projectId);
+        var result = checkOutPort.execute(userId, projectId, photoUrl, latitude, longitude);
         return DtoMapper.toRegisterAttendanceOutput(result);
     }
 
@@ -296,7 +300,7 @@ public RegisterAttendanceOutput registerAttendance(
     // REQUEST OBSERVATION PM (SUBMITTED → OBSERVATION)
     // =========================
     @Mutation("requestObservationPM")
-    @RolesAllowed("PROJECT_MANAGER")
+    @RolesAllowed({"PROJECT_MANAGER", "ADMIN"})
     public JustificationOutput requestObservationPM(
             @Name("justificationId") UUID justificationId,
             @Name("comment") String comment,
@@ -318,7 +322,7 @@ public RegisterAttendanceOutput registerAttendance(
     // ==========================================
 
     @Mutation("approveJustificationPM")
-    @RolesAllowed("PROJECT_MANAGER")
+    @RolesAllowed({"PROJECT_MANAGER", "ADMIN"})
     public JustificationOutput approveJustificationPM(
             @Name("justificationId") UUID justificationId,
             @Name("comment") String comment,
@@ -340,7 +344,7 @@ public RegisterAttendanceOutput registerAttendance(
     }
 
     @Mutation("rejectJustificationPM")
-    @RolesAllowed("PROJECT_MANAGER")
+    @RolesAllowed({"PROJECT_MANAGER", "ADMIN"})
     public JustificationOutput rejectJustificationPM(
             @Name("justificationId") UUID justificationId,
             @Name("comment") String comment,

@@ -55,7 +55,7 @@ export const typeDefs = parse(/* GraphQL */ `
 
   type Mutation {
     registerAttendance(input: RegisterAttendanceInput): RegisterAttendanceOutput
-    checkOut(projectId: String): RegisterAttendanceOutput
+    checkOut(projectId: String, photoUrl: String, latitude: Float, longitude: Float): RegisterAttendanceOutput
     saveJustification(input: SaveJustificationInputInput): SaveJustificationOutput
     editJustification(id: String, input: SaveJustificationInputInput): SaveJustificationOutput
     submitJustification(id: String): SaveJustificationOutput
@@ -140,6 +140,7 @@ export const typeDefs = parse(/* GraphQL */ `
 
   type JustificationHistoryOutput @shareable {
     id: String
+    justificationId: String
     previousStatus: String
     newStatus: String
     comment: String

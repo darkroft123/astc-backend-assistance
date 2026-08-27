@@ -32,9 +32,18 @@ public class CheckOutUseCase implements CheckOutPort {
     @Inject
     com.smms.assistance.infrastructure.client.ProjectManagerClientWrapper pmClientWrapper;
 
+    @Inject
+    com.smms.assistance.infrastructure.storage.S3StorageAdapter s3StorageAdapter;
+
     @Override
     @Transactional
     public AttendanceEntity execute(UUID userId, UUID projectId) {
+        return execute(userId, projectId, null, null, null);
+    }
+
+    @Override
+    @Transactional
+    public AttendanceEntity execute(UUID userId, UUID projectId, String photoUrl, Double latitude, Double longitude) {
         String projectTimezone = resolveProjectTimezone(userId, projectId);
         ZonedDateTime nowInProjectZone = TimezoneService.zonedNow(projectTimezone);
         LocalDate today = nowInProjectZone.toLocalDate();
@@ -62,6 +71,30 @@ public class CheckOutUseCase implements CheckOutPort {
         }
 
         entity.setCheckOut(nowTime);
+
+        // Update location if provided
+        if (latitude != null) entity.setLatitude(latitude);
+        if (longitude != null) entity.setLongitude(longitude);
+
+        // Upload and update photo if provided
+        if (photoUrl != null && !photoUrl.isBlank()) {
+            try {
+                String base64 = photoUrl;
+                if (base64.contains(",")) {
+                    base64 = base64.split(",")[1];
+                }
+                byte[] decoded = java.util.Base64.getDecoder().decode(base64);
+                if (decoded.length > 0) {
+                    java.io.ByteArrayInputStream stream = new java.io.ByteArrayInputStream(decoded);
+                    String folder = "document/private/user/" + userId + "/photo";
+                    String filename = entity.getId() + "_checkout.jpg";
+                    String key = s3StorageAdapter.upload(folder, filename, stream, decoded.length, "image/jpeg");
+                    entity.setPhotoUrl(key);
+                }
+            } catch (Exception e) {
+                System.out.println("[CheckOut] Error uploading checkout photo: " + e.getMessage());
+            }
+        }
 
         String departureStatus = classifyDeparture(userId, projectId, today, entity.getStatus(), nowTime);
         entity.setStatus(departureStatus);

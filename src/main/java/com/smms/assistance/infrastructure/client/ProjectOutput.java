@@ -15,7 +15,6 @@ public class ProjectOutput {
     public Integer graceMinutes;
     public String timezone;
     public Integer vacationEligibilityDays;
-    public java.util.List<ProjectMemberOutput> members;
     public java.util.List<String> holidays;
     public String status;
     public String startDate;
@@ -108,9 +107,6 @@ public class ProjectOutput {
         this.vacationEligibilityDays = vacationEligibilityDays;
     }
 
-    public java.util.List<ProjectMemberOutput> getMembers() { return members; }
-    public void setMembers(java.util.List<ProjectMemberOutput> members) { this.members = members; }
-    
     public java.util.List<String> getHolidays() { return holidays; }
     public void setHolidays(java.util.List<String> holidays) { this.holidays = holidays; }
     

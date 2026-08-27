@@ -195,13 +195,14 @@ public class S3StorageAdapter {
     }
 
     public String generatePresignedUrl(String key, int expiryMinutes) {
+        int safeExpiryMinutes = Math.min(Math.max(1, expiryMinutes), 10080);
         GetObjectRequest getObjectRequest = GetObjectRequest.builder()
                 .bucket(bucket)
                 .key(key)
                 .build();
 
         GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
-                .signatureDuration(Duration.ofMinutes(expiryMinutes))
+                .signatureDuration(Duration.ofMinutes(safeExpiryMinutes))
                 .getObjectRequest(getObjectRequest)
                 .build();
 
@@ -209,9 +210,37 @@ public class S3StorageAdapter {
 
         url = normalizeMinioUrl(url);
 
-        log.info("Generated presigned URL -> key={}, expiryMinutes={}, url={}", key, expiryMinutes, url);
+        log.info("Generated presigned URL -> key={}, expiryMinutes={}, url={}", key, safeExpiryMinutes, url);
 
         return url;
+    }
+
+    public String generateInternalPresignedUrl(String key, int expiryMinutes) {
+        int safeExpiryMinutes = Math.min(Math.max(1, expiryMinutes), 10080);
+        var credentials = StaticCredentialsProvider.create(
+                AwsBasicCredentials.create(accessKey, secretKey)
+        );
+        try (S3Presigner internalPresigner = S3Presigner.builder()
+                .endpointOverride(URI.create(endpoint))
+                .region(Region.of(region))
+                .credentialsProvider(credentials)
+                .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
+                .build()) {
+            GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(key)
+                    .build();
+            GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
+                    .signatureDuration(Duration.ofMinutes(safeExpiryMinutes))
+                    .getObjectRequest(getObjectRequest)
+                    .build();
+            String url = internalPresigner.presignGetObject(presignRequest).url().toString();
+            log.info("Generated internal presigned URL -> key={}, url={}", key, url);
+            return url;
+        } catch (Exception e) {
+            log.error("Error generating internal presigned URL for key={}", key, e);
+            return getPublicUrl(key);
+        }
     }
 
     /**
@@ -226,24 +255,34 @@ public class S3StorageAdapter {
 
             if (host == null) return url;
 
+            String newPath = uri.getRawPath();
+            String actualHost = host;
             String expectedPrefix = bucket + ".";
             if (host.startsWith(expectedPrefix)) {
-                String actualHost = host.substring(expectedPrefix.length());
-                String newPath = "/" + bucket + uri.getRawPath();
-
-                StringBuilder sb = new StringBuilder();
-                sb.append(uri.getScheme()).append("://").append(actualHost);
-                if (uri.getPort() > 0) {
-                    sb.append(":").append(uri.getPort());
-                }
-                sb.append(newPath);
-                if (uri.getRawQuery() != null) {
-                    sb.append("?").append(uri.getRawQuery());
-                }
-
-                log.info("Normalized virtual-host-style URL: {} -> {}", url, sb);
-                return sb.toString();
+                actualHost = host.substring(expectedPrefix.length());
+                newPath = "/" + bucket + uri.getRawPath();
             }
+
+            StringBuilder sb = new StringBuilder();
+            sb.append(uri.getScheme()).append("://").append(actualHost);
+            if (uri.getPort() > 0) {
+                sb.append(":").append(uri.getPort());
+            }
+            sb.append(newPath);
+            if (uri.getRawQuery() != null) {
+                sb.append("?").append(uri.getRawQuery());
+            }
+
+            String normalized = sb.toString();
+
+            if (publicEndpoint != null && !publicEndpoint.isBlank() && endpoint != null && !endpoint.isBlank()) {
+                String cleanEndpoint = endpoint.endsWith("/") ? endpoint.substring(0, endpoint.length() - 1) : endpoint;
+                String cleanPublic = publicEndpoint.endsWith("/") ? publicEndpoint.substring(0, publicEndpoint.length() - 1) : publicEndpoint;
+                normalized = normalized.replace(cleanEndpoint, cleanPublic);
+            }
+
+            log.info("Normalized MinIO presigned URL: {} -> {}", url, normalized);
+            return normalized;
         } catch (Exception e) {
             log.warn("Error normalizing MinIO presigned URL: {}", e.getMessage());
         }
