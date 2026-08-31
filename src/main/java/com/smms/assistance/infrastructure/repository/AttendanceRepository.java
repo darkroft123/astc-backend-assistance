@@ -269,12 +269,20 @@ public class AttendanceRepository implements PanacheRepositoryBase<AttendanceEnt
             String status,
             int page,
             int size) {
+        return findPageByUsersNative(userIds, projectId, null, from, to, status, page, size);
+    }
+
+    public Page<AttendanceEntity> findPageByUsersNative(
+            List<UUID> userIds,
+            UUID projectId,
+            List<UUID> allowedProjectIds,
+            LocalDate from,
+            LocalDate to,
+            String status,
+            int page,
+            int size) {
             
         long oldStart = System.currentTimeMillis();
-        findByUsers(userIds, projectId, from, to, status, page, size);
-        countByUsers(userIds, projectId, from, to, status);
-        long oldTime = System.currentTimeMillis() - oldStart;
-
         long newStart = System.currentTimeMillis();
         
         StringBuilder sql = new StringBuilder(
@@ -296,6 +304,13 @@ public class AttendanceRepository implements PanacheRepositoryBase<AttendanceEnt
         if (projectId != null) {
             sql.append(" AND a.project_id = :projectId");
             params.put("projectId", projectId);
+        } else if (allowedProjectIds != null) {
+            if (allowedProjectIds.isEmpty()) {
+                sql.append(" AND 1=0");
+            } else {
+                sql.append(" AND a.project_id IN (:allowedProjectIds)");
+                params.put("allowedProjectIds", allowedProjectIds);
+            }
         }
         if (from != null) {
             sql.append(" AND a.date >= :from");
@@ -323,7 +338,7 @@ public class AttendanceRepository implements PanacheRepositoryBase<AttendanceEnt
         List<Object[]> rows = nativeQuery.getResultList();
         
         long newTime = System.currentTimeMillis() - newStart;
-        System.out.println(String.format("[PERF] findPageByUsersNative (attendance) -> JPQL (2 queries): %d ms | Native (1 query OVER): %d ms", oldTime, newTime));
+        System.out.println(String.format("[PERF] findPageByUsersNative (attendance) -> Native (1 query OVER): %d ms", newTime));
 
         long totalCount = 0;
         List<AttendanceEntity> mapped = new ArrayList<>();

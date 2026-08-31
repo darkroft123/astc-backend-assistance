@@ -219,19 +219,28 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
     public Page<JustificationEntity> findPageByUsersNative(List<UUID> userIds, String status,
             LocalDate from, LocalDate to,
             int page, int size) {
+        return findPageByUsersNative(userIds, null, status, from, to, page, size);
+    }
+
+    public Page<JustificationEntity> findPageByUsersNative(
+            List<UUID> userIds,
+            List<UUID> allowedProjectIds,
+            String status,
+            LocalDate from,
+            LocalDate to,
+            int page,
+            int size) {
             
         long oldStart = System.currentTimeMillis();
-        findByUsers(userIds, status, from, to, page, size);
-        countByUsers(userIds, status, from, to);
-        long oldTime = System.currentTimeMillis() - oldStart;
-
         long newStart = System.currentTimeMillis();
 
         StringBuilder sql = new StringBuilder(
             "SELECT CAST(j.id AS VARCHAR), CAST(j.user_id AS VARCHAR), CAST(j.absence_id AS VARCHAR), " +
             "j.status, j.description, j.submitted_at, j.reviewed_at, j.created_at, j.updated_at, " +
             "COUNT(*) OVER() " +
-            "FROM justifications j WHERE 1=1"
+            "FROM justifications j " +
+            (allowedProjectIds != null ? "JOIN absences a ON a.id = j.absence_id " : "") +
+            "WHERE 1=1"
         );
         Map<String, Object> params = new HashMap<>();
 
@@ -242,7 +251,16 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
             sql.append(" AND 1=0");
         }
 
-        if (status != null) {
+        if (allowedProjectIds != null) {
+            if (allowedProjectIds.isEmpty()) {
+                sql.append(" AND 1=0");
+            } else {
+                sql.append(" AND a.project_id IN (:allowedProjectIds)");
+                params.put("allowedProjectIds", allowedProjectIds);
+            }
+        }
+
+        if (status != null && !status.isBlank()) {
             sql.append(" AND j.status = :status");
             params.put("status", status);
         }
@@ -268,7 +286,7 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
         List<Object[]> rows = nativeQuery.getResultList();
 
         long newTime = System.currentTimeMillis() - newStart;
-        System.out.println(String.format("[PERF] findPageByUsersNative (justifications) -> JPQL (2 queries): %d ms | Native (1 query OVER): %d ms", oldTime, newTime));
+        System.out.println(String.format("[PERF] findPageByUsersNative (justifications) -> Native (1 query OVER): %d ms", newTime));
 
         long totalCount = 0;
         List<JustificationEntity> mapped = new ArrayList<>();

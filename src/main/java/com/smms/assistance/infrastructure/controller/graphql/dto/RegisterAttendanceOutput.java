@@ -16,8 +16,12 @@ import org.eclipse.microprofile.graphql.Type;
 public class RegisterAttendanceOutput {
     private String id;
     private String userId;
+    private String projectId;
     private String date;
     private String checkIn;
     private String checkOut;
     private String status;
+    private String photoUrl;
+    private Double latitude;
+    private Double longitude;
 }

@@ -54,13 +54,36 @@ public class CheckOutUseCase implements CheckOutPort {
             existing = attendanceRepository
                     .find("userId = ?1 and projectId is null and date = ?2", userId, today)
                     .firstResultOptional();
+            if (existing.isEmpty()) {
+                existing = attendanceRepository
+                        .find("userId = ?1 and date = ?2 and checkOut is null order by checkIn desc", userId, today)
+                        .firstResultOptional();
+            }
         } else {
             existing = attendanceRepository
                     .find("userId = ?1 and projectId = ?2 and date = ?3", userId, projectId, today)
                     .firstResultOptional();
+            if (existing.isEmpty()) {
+                existing = attendanceRepository
+                        .find("userId = ?1 and projectId is null and date = ?2", userId, today)
+                        .firstResultOptional();
+            }
+            if (existing.isEmpty()) {
+                existing = attendanceRepository
+                        .find("userId = ?1 and date = ?2 and checkOut is null order by checkIn desc", userId, today)
+                        .firstResultOptional();
+            }
         }
 
         if (existing.isEmpty()) {
+            // Check if user already completed checkout today
+            boolean alreadyCheckedOut = attendanceRepository
+                    .find("userId = ?1 and date = ?2 and checkOut is not null", userId, today)
+                    .firstResultOptional()
+                    .isPresent();
+            if (alreadyCheckedOut) {
+                throw new IllegalStateException("Ya registraste tu salida hoy.");
+            }
             throw new IllegalStateException("No hay registro de entrada para hoy. Registre su entrada primero.");
         }
 

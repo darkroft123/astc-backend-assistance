@@ -164,13 +164,31 @@ public class AssistanceQueryResolver {
         String timezone = resolveProjectTimezone(userId, projectId);
         java.time.LocalDate today = TimezoneService.todayAtZone(timezone);
 
-        var existing = (projectId == null)
-                ? attendanceRepository
+        java.util.Optional<com.smms.assistance.domain.entity.AttendanceEntity> existing;
+        if (projectId != null) {
+            existing = attendanceRepository
+                    .find("userId = ?1 and projectId = ?2 and date = ?3", userId, projectId, today)
+                    .firstResultOptional();
+            if (existing.isEmpty()) {
+                existing = attendanceRepository
                         .find("userId = ?1 and projectId is null and date = ?2", userId, today)
-                        .firstResultOptional()
-                : attendanceRepository
-                        .find("userId = ?1 and projectId = ?2 and date = ?3", userId, projectId, today)
                         .firstResultOptional();
+            }
+            if (existing.isEmpty()) {
+                existing = attendanceRepository
+                        .find("userId = ?1 and date = ?2 order by checkIn desc", userId, today)
+                        .firstResultOptional();
+            }
+        } else {
+            existing = attendanceRepository
+                    .find("userId = ?1 and projectId is null and date = ?2", userId, today)
+                    .firstResultOptional();
+            if (existing.isEmpty()) {
+                existing = attendanceRepository
+                        .find("userId = ?1 and date = ?2 order by checkIn desc", userId, today)
+                        .firstResultOptional();
+            }
+        }
 
         if (existing.isEmpty()) return null;
 
@@ -304,7 +322,7 @@ public class AssistanceQueryResolver {
         }
         if ("PROJECT_MANAGER".equals(role)) {
             if (requestedProjectId == null) {
-                System.out.println("⚠️ [Security] PM accessing global view (projectId is null). Trusting upstream caller (project-assistance) to filter userIds.");
+                System.out.println("⚠️ [Security] PM accessing global view (projectId is null). Scoping to PM projects.");
                 return;
             }
             try {
@@ -319,6 +337,33 @@ public class AssistanceQueryResolver {
                 throw new SecurityException("Access Denied: Could not verify project ownership");
             }
         }
+    }
+
+    private java.util.List<UUID> resolveAllowedProjectIds(UUID requestedProjectId) {
+        String role = authContext.getRole();
+        if ("ADMIN".equals(role)) {
+            return requestedProjectId != null ? java.util.List.of(requestedProjectId) : null;
+        }
+        if ("PROJECT_MANAGER".equals(role)) {
+            if (requestedProjectId != null) {
+                validatePmOwnership(requestedProjectId);
+                return java.util.List.of(requestedProjectId);
+            }
+            try {
+                java.util.List<ProjectOutput> projects = pmClientWrapper.getMyProjects();
+                if (projects != null && !projects.isEmpty()) {
+                    return projects.stream()
+                            .map(p -> p.id)
+                            .filter(java.util.Objects::nonNull)
+                            .collect(java.util.stream.Collectors.toList());
+                }
+                return java.util.List.of();
+            } catch (Exception e) {
+                LOG.error("Failed to resolve PM project IDs: " + e.getMessage());
+                return java.util.List.of();
+            }
+        }
+        return requestedProjectId != null ? java.util.List.of(requestedProjectId) : null;
     }
 
     // ==========================================
@@ -346,14 +391,16 @@ public class AssistanceQueryResolver {
                 + ", page: " + page 
                 + ", size: " + size);
 
-        // [IDOR PATCH] Validate PM owns the requested project
-        validatePmOwnership(projectId);
+        java.util.List<UUID> allowedProjectIds = resolveAllowedProjectIds(projectId);
+        if (allowedProjectIds != null && allowedProjectIds.isEmpty()) {
+            return new AttendancePageOutput(java.util.List.of(), page, size, 0L);
+        }
 
         LocalDate from = fromDate != null ? LocalDate.parse(fromDate) : null;
         LocalDate to = toDate != null ? LocalDate.parse(toDate) : null;
 
         com.smms.assistance.domain.model.Page<com.smms.assistance.domain.entity.AttendanceEntity> pageData = 
-                attendanceRepository.findPageByUsersNative(userIds, projectId, from, to, status, page, size);
+                attendanceRepository.findPageByUsersNative(userIds, projectId, allowedProjectIds, from, to, status, page, size);
 
         java.util.List<com.smms.assistance.domain.entity.AttendanceEntity> items = pageData.getItems();
         long total = pageData.getTotalItems();
@@ -395,11 +442,16 @@ public class AssistanceQueryResolver {
                 + ", page: " + page 
                 + ", size: " + size);
 
+        java.util.List<UUID> allowedProjectIds = resolveAllowedProjectIds(null);
+        if (allowedProjectIds != null && allowedProjectIds.isEmpty()) {
+            return new JustificationPageOutput(java.util.List.of(), page, size, 0L);
+        }
+
         LocalDate from = fromDate != null ? LocalDate.parse(fromDate) : null;
         LocalDate to = toDate != null ? LocalDate.parse(toDate) : null;
 
         com.smms.assistance.domain.model.Page<com.smms.assistance.domain.entity.JustificationEntity> pageData = 
-                justificationRepository.findPageByUsersNative(userIds, status, from, to, page, size);
+                justificationRepository.findPageByUsersNative(userIds, allowedProjectIds, status, from, to, page, size);
 
         java.util.List<com.smms.assistance.domain.entity.JustificationEntity> items = pageData.getItems();
         long total = pageData.getTotalItems();
@@ -476,7 +528,7 @@ public class AssistanceQueryResolver {
         System.out.println("[Assistance PM API] [Query] GetJustificationDetailPM enriched with absence info -> absenceDate: " + output.getAbsenceDate() + ", absenceType: " + output.getAbsenceType());
 
         var historyEntities = com.smms.assistance.domain.entity.JustificationHistoryEntity
-                .find("justificationId = ?1", Sort.by("changedAt").ascending(), id)
+                .find("justificationId = ?1", io.quarkus.panache.common.Sort.by("changedAt").ascending(), id)
                 .<com.smms.assistance.domain.entity.JustificationHistoryEntity>list();
 
         var historyOutputs = historyEntities.stream()
@@ -514,8 +566,14 @@ public class AssistanceQueryResolver {
                 + ", fromDate: " + fromDate 
                 + ", toDate: " + toDate);
 
-        // [IDOR PATCH] Validate PM owns the requested project
-        validatePmOwnership(projectId);
+        java.util.List<UUID> allowedProjectIds = resolveAllowedProjectIds(projectId);
+        if (allowedProjectIds != null && allowedProjectIds.isEmpty()) {
+            return DashboardOutput.builder()
+                    .totalAttendances(0)
+                    .totalAbsences(0)
+                    .pendingJustifications(0)
+                    .build();
+        }
 
         LocalDate from = fromDate != null ? LocalDate.parse(fromDate) : null;
         LocalDate to = toDate != null ? LocalDate.parse(toDate) : null;
@@ -529,8 +587,8 @@ public class AssistanceQueryResolver {
 
             // 1. Attendances
             sql.append("(SELECT COUNT(id) FROM attendances WHERE user_id IN :userIds AND status NOT IN ('OUTSIDE_SCHEDULE', 'OUTSIDE_SCHEDULE_CHECKED_OUT')");
-            if (projectId != null) {
-                sql.append(" AND project_id = :projectId");
+            if (allowedProjectIds != null) {
+                sql.append(" AND project_id IN :allowedProjectIds");
             }
             if (from != null) {
                 sql.append(" AND date >= :fromDate");
@@ -542,8 +600,8 @@ public class AssistanceQueryResolver {
 
             // 2. Absences
             sql.append("(SELECT COUNT(id) FROM absences WHERE user_id IN :userIds");
-            if (projectId != null) {
-                sql.append(" AND project_id = :projectId");
+            if (allowedProjectIds != null) {
+                sql.append(" AND project_id IN :allowedProjectIds");
             }
             if (from != null) {
                 sql.append(" AND date >= :fromDate");
@@ -555,8 +613,8 @@ public class AssistanceQueryResolver {
 
             // 3. Justifications
             sql.append("(SELECT COUNT(j.id) FROM justifications j JOIN absences a ON a.id = j.absence_id WHERE j.user_id IN :userIds AND j.status IN ('SUBMITTED', 'PENDING')");
-            if (projectId != null) {
-                sql.append(" AND a.project_id = :projectId");
+            if (allowedProjectIds != null) {
+                sql.append(" AND a.project_id IN :allowedProjectIds");
             }
             if (from != null) {
                 sql.append(" AND a.date >= :fromDate");
@@ -568,8 +626,8 @@ public class AssistanceQueryResolver {
 
             var nativeQuery = entityManager.createNativeQuery(sql.toString())
                     .setParameter("userIds", userIds);
-            if (projectId != null) {
-                nativeQuery.setParameter("projectId", projectId);
+            if (allowedProjectIds != null) {
+                nativeQuery.setParameter("allowedProjectIds", allowedProjectIds);
             }
             if (from != null) {
                 nativeQuery.setParameter("fromDate", from);

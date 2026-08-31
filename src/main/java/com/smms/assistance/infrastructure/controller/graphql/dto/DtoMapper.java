@@ -115,10 +115,14 @@ public final class DtoMapper {
         return RegisterAttendanceOutput.builder()
                 .id(entity.getId() != null ? entity.getId().toString() : null)
                 .userId(entity.getUserId() != null ? entity.getUserId().toString() : null)
+                .projectId(entity.getProjectId() != null ? entity.getProjectId().toString() : null)
                 .date(entity.getDate() != null ? entity.getDate().toString() : null)
                 .checkIn(entity.getCheckIn() != null ? entity.getCheckIn().toString() : null)
                 .checkOut(entity.getCheckOut() != null ? entity.getCheckOut().toString() : null)
                 .status(entity.getStatus())
+                .photoUrl(entity.getPhotoUrl())
+                .latitude(entity.getLatitude() != null ? entity.getLatitude().doubleValue() : null)
+                .longitude(entity.getLongitude() != null ? entity.getLongitude().doubleValue() : null)
                 .build();
     }
 

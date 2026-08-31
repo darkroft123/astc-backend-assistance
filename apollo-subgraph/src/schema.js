@@ -95,10 +95,14 @@ export const typeDefs = parse(/* GraphQL */ `
   type RegisterAttendanceOutput {
     id: String
     userId: String
+    projectId: String
     date: String
     checkIn: String
     checkOut: String
     status: String
+    photoUrl: String
+    latitude: Float
+    longitude: Float
   }
 
   type AbsenceOutput @key(fields: "id") {

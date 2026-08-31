@@ -36,10 +36,10 @@ public class GetDashboardUseCase implements GetDashboardPort {
         String sql = "SELECT " +
                 "(SELECT COUNT(id) FROM attendances WHERE user_id = :userId AND status NOT IN ('OUTSIDE_SCHEDULE', 'OUTSIDE_SCHEDULE_CHECKED_OUT') AND (CAST(:fromDate AS date) IS NULL OR date >= CAST(:fromDate AS date)) AND (CAST(:toDate AS date) IS NULL OR date <= CAST(:toDate AS date))) as att_count, " +
                 "(SELECT COUNT(id) FROM absences WHERE user_id = :userId AND (CAST(:fromDate AS date) IS NULL OR date >= CAST(:fromDate AS date)) AND (CAST(:toDate AS date) IS NULL OR date <= CAST(:toDate AS date))) as abs_count, " +
-                "(SELECT COUNT(j.id) FROM justifications j JOIN absences a ON a.id = j.absence_id " +
-                " WHERE j.user_id = :userId AND j.status = 'PENDING' " +
-                " AND (CAST(:fromDate AS date) IS NULL OR a.date >= CAST(:fromDate AS date)) " +
-                " AND (CAST(:toDate AS date) IS NULL OR a.date <= CAST(:toDate AS date))) as just_count";
+                "(SELECT COUNT(j.id) FROM justifications j LEFT JOIN absences a ON a.id = j.absence_id " +
+                " WHERE j.user_id = :userId AND UPPER(j.status) IN ('PENDING', 'SUBMITTED', 'PENDIENTE', 'EN_REVISION') " +
+                " AND (CAST(:fromDate AS date) IS NULL OR CAST(COALESCE(j.submitted_at, j.created_at, a.date) AS date) >= CAST(:fromDate AS date)) " +
+                " AND (CAST(:toDate AS date) IS NULL OR CAST(COALESCE(j.submitted_at, j.created_at, a.date) AS date) <= CAST(:toDate AS date))) as just_count";
 
         Object[] result = (Object[]) entityManager.createNativeQuery(sql)
                 .setParameter("userId", userId)
