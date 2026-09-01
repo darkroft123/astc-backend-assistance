@@ -40,10 +40,16 @@ export async function callAssistance(query, variables = {}, token = '') {
     })
   });
 
-  const payload = await response.json();
+  const text = await response.text();
+  let payload;
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    throw new Error(`Respuesta no-JSON de assistance (HTTP ${response.status}): ${text.slice(0, 200)}`);
+  }
 
   if (!response.ok) {
-    throw new Error(payload?.errors?.map((error) => error.message).join(' | ') || 'Error llamando a assistance');
+    throw new Error(payload?.errors?.map((error) => error.message).join(' | ') || `Error HTTP ${response.status} llamando a assistance`);
   }
 
   if (payload.errors?.length) {
