@@ -76,6 +76,9 @@ public class OutboxEventProcessor {
     @Inject
     com.smms.assistance.infrastructure.client.AuthClient authClient;
 
+    @Inject
+    com.smms.assistance.infrastructure.client.ProjectManagerClientWrapper projectManagerClient;
+
     @ConfigProperty(name = "event.notification.template.attendance_registered", defaultValue = "AST00001")
     String attendanceTemplateCode;
 
@@ -352,6 +355,17 @@ public class OutboxEventProcessor {
             if (attendance != null) {
                 if (attendance.getProjectId() != null) {
                     variables.put("PROJECT_ID", attendance.getProjectId().toString());
+                    try {
+                        var projects = projectManagerClient.getMyProjects();
+                        for (var p : projects) {
+                            if (attendance.getProjectId().equals(p.getId())) {
+                                variables.put("PROJECT_NAME", p.getName());
+                                break;
+                            }
+                        }
+                    } catch (Exception e) {
+                        LOG.warnf("Could not resolve project name for %s", attendance.getProjectId());
+                    }
                 }
                 if (attendance.getCheckIn() != null) {
                     variables.put("CHECKIN_TIME", attendance.getCheckIn().toString());
