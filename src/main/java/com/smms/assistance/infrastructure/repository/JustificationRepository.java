@@ -177,7 +177,7 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
 
         sql.append(" ORDER BY j.created_at DESC LIMIT :limit OFFSET :offset");
         params.put("limit", size);
-        params.put("offset", page * size);
+        params.put("offset", Math.max(0, page - 1) * size);
 
         var nativeQuery = getEntityManager().createNativeQuery(sql.toString());
         for (Map.Entry<String, Object> entry : params.entrySet()) {
@@ -244,11 +244,13 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
         );
         Map<String, Object> params = new HashMap<>();
 
-        if (userIds != null && !userIds.isEmpty()) {
-            sql.append(" AND j.user_id IN (:userIds)");
-            params.put("userIds", userIds);
-        } else {
-            sql.append(" AND 1=0");
+        if (userIds != null) {
+            if (!userIds.isEmpty()) {
+                sql.append(" AND j.user_id IN (:userIds)");
+                params.put("userIds", userIds);
+            } else {
+                sql.append(" AND 1=0");
+            }
         }
 
         if (allowedProjectIds != null) {
@@ -275,7 +277,7 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
 
         sql.append(" ORDER BY j.created_at DESC LIMIT :limit OFFSET :offset");
         params.put("limit", size);
-        params.put("offset", page * size);
+        params.put("offset", Math.max(0, page - 1) * size);
 
         var nativeQuery = getEntityManager().createNativeQuery(sql.toString());
         for (Map.Entry<String, Object> entry : params.entrySet()) {

@@ -38,7 +38,7 @@ public interface ProjectManagerClient {
             @Name("date") LocalDate date
     );
 
-    @Query("isholiday")
+    @Query("isHoliday")
     boolean isHoliday(
             @Name("projectId") UUID projectId,
             @Name("date") LocalDate date

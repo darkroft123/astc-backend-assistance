@@ -121,7 +121,7 @@ public class AbsenceRepository implements PanacheRepositoryBase<AbsenceEntity, U
 
         sql.append(" ORDER BY a.date DESC LIMIT :limit OFFSET :offset");
         params.put("limit", size);
-        params.put("offset", page * size);
+        params.put("offset", Math.max(0, page - 1) * size);
 
         var nativeQuery = getEntityManager().createNativeQuery(sql.toString());
         for (Map.Entry<String, Object> entry : params.entrySet()) {
@@ -170,11 +170,13 @@ public class AbsenceRepository implements PanacheRepositoryBase<AbsenceEntity, U
         );
         Map<String, Object> params = new HashMap<>();
 
-        if (userIds != null && !userIds.isEmpty()) {
-            sql.append(" AND a.user_id IN (:userIds)");
-            params.put("userIds", userIds);
-        } else {
-            sql.append(" AND 1=0");
+        if (userIds != null) {
+            if (!userIds.isEmpty()) {
+                sql.append(" AND a.user_id IN (:userIds)");
+                params.put("userIds", userIds);
+            } else {
+                sql.append(" AND 1=0");
+            }
         }
 
         if (projectId != null) {
@@ -200,7 +202,7 @@ public class AbsenceRepository implements PanacheRepositoryBase<AbsenceEntity, U
 
         sql.append(" ORDER BY a.date DESC LIMIT :limit OFFSET :offset");
         params.put("limit", size);
-        params.put("offset", page * size);
+        params.put("offset", Math.max(0, page - 1) * size);
 
         var nativeQuery = getEntityManager().createNativeQuery(sql.toString());
         for (Map.Entry<String, Object> entry : params.entrySet()) {
