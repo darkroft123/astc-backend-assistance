@@ -165,6 +165,8 @@ public class OutboxEventProcessor {
 
         LOG.infof("📬 [Outbox] Found %d unpublished outbox events to process", events.size());
 
+        java.util.List<UUID> successfulIds = new java.util.ArrayList<>();
+
         // Extract IDs for batch preloading
         java.util.Set<UUID> attendanceIds = new java.util.HashSet<>();
         java.util.Set<UUID> absenceIds = new java.util.HashSet<>();
@@ -233,7 +235,7 @@ public class OutboxEventProcessor {
                     } else {
                         LOG.warnf("⚠ [Outbox] Event %s mapped to a null notification payload, marking as processed", event.getId());
                     }
-                    markPublished(event);
+                    successfulIds.add(event.getId());
                 });
             } catch (Exception e) {
                 LOG.errorf(e, "❌ [Outbox] Failed to process outbox event %s (type=%s)",
@@ -243,6 +245,17 @@ public class OutboxEventProcessor {
                 } catch (Exception ex) {
                     LOG.errorf(ex, "❌ [Outbox] Failed to record failed attempt for event %s", event.getId());
                 }
+            }
+        }
+
+        if (!successfulIds.isEmpty()) {
+            try {
+                io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> {
+                    outboxRepository.update("published = true, publishedAt = ?1, status = 'PUBLISHED', lastError = null WHERE id IN (?2)",
+                            LocalDateTime.now(), successfulIds);
+                });
+            } catch (Exception e) {
+                LOG.errorf(e, "Failed to perform bulk update for published outbox events");
             }
         }
     }
