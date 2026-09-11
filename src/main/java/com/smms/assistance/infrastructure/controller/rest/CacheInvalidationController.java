@@ -23,6 +23,7 @@ public class CacheInvalidationController {
 
     @POST
     @Path("/invalidate-projects")
+    @io.smallrye.common.annotation.Blocking
     public Response invalidateProjects(String body) {
         try {
             JsonObject json = new JsonObject(body);
