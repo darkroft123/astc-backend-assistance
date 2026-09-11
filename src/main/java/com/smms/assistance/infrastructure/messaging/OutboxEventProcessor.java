@@ -251,11 +251,26 @@ public class OutboxEventProcessor {
         if (!successfulIds.isEmpty()) {
             try {
                 io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> {
-                    outboxRepository.update("published = true, publishedAt = ?1, status = 'PUBLISHED', lastError = null WHERE id IN (?2)",
-                            LocalDateTime.now(), successfulIds);
+                    outboxRepository.getEntityManager().createNativeQuery(
+                            "UPDATE outbox_events SET published = true, published_at = now(), status = 'PUBLISHED', last_error = null WHERE id = ANY(:ids)")
+                            .setParameter("ids", successfulIds.toArray(new UUID[0]))
+                            .executeUpdate();
                 });
+                LOG.infof("✅ [Outbox] Bulk updated %d events as PUBLISHED", successfulIds.size());
             } catch (Exception e) {
-                LOG.errorf(e, "Failed to perform bulk update for published outbox events");
+                LOG.error("Failed to perform bulk update for published outbox events, executing fallback", e);
+                for (UUID id : successfulIds) {
+                    try {
+                        io.quarkus.narayana.jta.QuarkusTransaction.requiringNew().run(() -> {
+                            outboxRepository.getEntityManager().createNativeQuery(
+                                    "UPDATE outbox_events SET published = true, published_at = now(), status = 'PUBLISHED', last_error = null WHERE id = :id")
+                                    .setParameter("id", id)
+                                    .executeUpdate();
+                        });
+                    } catch (Exception ex) {
+                        LOG.errorf(ex, "Failed fallback update for outbox event %s", id);
+                    }
+                }
             }
         }
     }
