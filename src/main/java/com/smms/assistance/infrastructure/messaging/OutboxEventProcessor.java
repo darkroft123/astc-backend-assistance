@@ -248,30 +248,30 @@ public class OutboxEventProcessor {
     }
 
     private void markPublished(OutboxEventEntity event) {
-        outboxRepository.findByIdOptional(event.getId()).ifPresent(managed -> {
-            managed.setPublished(true);
-            managed.setPublishedAt(LocalDateTime.now());
-            managed.setLastError(null);
-            managed.setStatus("PUBLISHED");
-        });
+        try {
+            outboxRepository.update("published = true, publishedAt = ?1, status = 'PUBLISHED', lastError = null WHERE id = ?2",
+                    LocalDateTime.now(), event.getId());
+        } catch (Exception e) {
+            LOG.errorf(e, "Failed to mark outbox event %s as PUBLISHED", event.getId());
+        }
     }
 
     private void markFailedAttempt(OutboxEventEntity event) {
-        outboxRepository.findByIdOptional(event.getId()).ifPresent(managed -> {
-            int attempts = managed.getAttempts() == null ? 0 : managed.getAttempts();
-            managed.setAttempts(attempts + 1);
-            if (attempts + 1 >= maxAttempts) {
+        try {
+            int attempts = event.getAttempts() == null ? 0 : event.getAttempts();
+            int newAttempts = attempts + 1;
+            if (newAttempts >= maxAttempts) {
                 LOG.errorf("💀 [Outbox] Event %s exceeded max attempts (%d), marking as FAILED",
                         event.getId(), maxAttempts);
-                managed.setPublished(true);
-                managed.setPublishedAt(LocalDateTime.now());
-                managed.setStatus("FAILED");
-                managed.setLastError("Exceeded max attempts");
+                outboxRepository.update("published = true, publishedAt = ?1, status = 'FAILED', lastError = 'Exceeded max attempts', attempts = ?2 WHERE id = ?3",
+                        LocalDateTime.now(), newAttempts, event.getId());
             } else {
-                managed.setStatus("PENDING");
-                managed.setLastError("Processing error, retry pending");
+                outboxRepository.update("status = 'PENDING', lastError = 'Processing error, retry pending', attempts = ?1 WHERE id = ?2",
+                        newAttempts, event.getId());
             }
-        });
+        } catch (Exception e) {
+            LOG.errorf(e, "Failed to record failed attempt for outbox event %s", event.getId());
+        }
     }
 
     private void enrichUserDetails(JsonObject payload, String userId) {

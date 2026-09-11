@@ -303,16 +303,13 @@ public RegisterAttendanceOutput registerAttendance(
     @RolesAllowed({"PROJECT_MANAGER", "ADMIN"})
     public JustificationOutput requestObservationPM(
             @Name("justificationId") UUID justificationId,
-            @Name("comment") String comment,
-            @Name("reviewedBy") UUID reviewedBy
+            @Name("comment") String comment
     ) {
         UUID currentPmId = authContext.getUserId();
         System.out.println("[Assistance PM API] [Mutation] RequestObservationPM by PM: " + currentPmId
                 + " -> justificationId: " + justificationId);
 
-        validatePmOwnershipForJustification(justificationId);
-
-        var result = requestObservationPMUseCase.execute(justificationId, comment, reviewedBy);
+        var result = requestObservationPMUseCase.execute(justificationId, comment, currentPmId);
 
         return DtoMapper.toJustificationOutput(result);
     }
@@ -325,18 +322,14 @@ public RegisterAttendanceOutput registerAttendance(
     @RolesAllowed({"PROJECT_MANAGER", "ADMIN"})
     public JustificationOutput approveJustificationPM(
             @Name("justificationId") UUID justificationId,
-            @Name("comment") String comment,
-            @Name("reviewedBy") UUID reviewedBy
+            @Name("comment") String comment
     ) {
         UUID currentPmId = authContext.getUserId();
         System.out.println("[Assistance PM API] [Mutation] ApproveJustificationPM initiated by PM: " + currentPmId 
                 + " -> justificationId: " + justificationId 
-                + ", comment: " + comment 
-                + ", reviewedBy: " + reviewedBy);
+                + ", comment: " + comment);
 
-        validatePmOwnershipForJustification(justificationId);
-
-        var result = approveJustificationPort.execute(justificationId, comment, reviewedBy);
+        var result = approveJustificationPort.execute(justificationId, comment, currentPmId);
 
         System.out.println("[Assistance PM API] [Mutation] ApproveJustificationPM completed -> justificationId: " + justificationId + ", new status: " + result.getStatus());
 
@@ -347,57 +340,17 @@ public RegisterAttendanceOutput registerAttendance(
     @RolesAllowed({"PROJECT_MANAGER", "ADMIN"})
     public JustificationOutput rejectJustificationPM(
             @Name("justificationId") UUID justificationId,
-            @Name("comment") String comment,
-            @Name("reviewedBy") UUID reviewedBy
+            @Name("comment") String comment
     ) {
         UUID currentPmId = authContext.getUserId();
         System.out.println("[Assistance PM API] [Mutation] RejectJustificationPM initiated by PM: " + currentPmId 
                 + " -> justificationId: " + justificationId 
-                + ", comment: " + comment 
-                + ", reviewedBy: " + reviewedBy);
+                + ", comment: " + comment);
 
-        validatePmOwnershipForJustification(justificationId);
-
-        var result = rejectJustificationPort.execute(justificationId, comment, reviewedBy);
+        var result = rejectJustificationPort.execute(justificationId, comment, currentPmId);
 
         System.out.println("[Assistance PM API] [Mutation] RejectJustificationPM completed -> justificationId: " + justificationId + ", new status: " + result.getStatus());
 
         return DtoMapper.toJustificationOutput(result);
-    }
-
-    // ==========================================
-    // SECURITY VALIDATION (IDOR PATCH + LOGS)
-    // ==========================================
-    private void validatePmOwnershipForJustification(UUID justificationId) {
-        String role = authContext.getRole();
-        if ("ADMIN".equals(role)) {
-            System.out.println("🛡️ [Security] ADMIN bypass granted for justificationId: " + justificationId);
-            return;
-        }
-        if ("PROJECT_MANAGER".equals(role)) {
-            com.smms.assistance.domain.entity.JustificationEntity justification = justificationRepository.findById(justificationId);
-            if (justification == null) throw new SecurityException("Access Denied: Justification not found");
-            
-            com.smms.assistance.domain.entity.AbsenceEntity absence = absenceRepository.findById(justification.getAbsenceId());
-            if (absence == null || absence.getProjectId() == null) {
-                throw new SecurityException("Access Denied: Absence or Project not found");
-            }
-            
-            UUID projectId = absence.getProjectId();
-            try {
-                java.util.List<com.smms.assistance.infrastructure.client.ProjectOutput> projects = pmClientWrapper.getMyProjects();
-                if (projects == null || projects.stream().noneMatch(p -> p.id != null && p.id.equals(projectId))) {
-                    System.out.println("🚨 [Security IDOR Blocked] PM " + authContext.getUserId() + " attempted to access unauthorized justificationId: " + justificationId);
-                    throw new SecurityException("Access Denied: You do not manage the project for this justification");
-                }
-                System.out.println("✅ [Security] PM Ownership validated for justification: " + justificationId);
-            } catch (Exception e) {
-                System.out.println("🚨 [Security Error] " + e.getMessage());
-                throw new SecurityException("Access Denied: Could not verify project ownership");
-            }
-        } else {
-            System.out.println("🚨 [Security Blocked] Unauthorized role " + role + " attempted to access justification: " + justificationId);
-            throw new SecurityException("Access Denied: Insufficient role");
-        }
     }
 }

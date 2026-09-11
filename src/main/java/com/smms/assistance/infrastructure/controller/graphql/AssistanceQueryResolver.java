@@ -1,7 +1,6 @@
 package com.smms.assistance.infrastructure.controller.graphql;
 
 import com.smms.assistance.application.in.GetDashboardPort;
-import com.smms.assistance.application.in.GetJustificationStatusPort;
 import com.smms.assistance.application.in.ListAbsencesPort;
 import com.smms.assistance.application.in.ListAttendancePort;
 import com.smms.assistance.application.in.ListJustificationsPort;
@@ -63,9 +62,6 @@ public class AssistanceQueryResolver {
 
     @Inject
     ListJustificationsPort listJustificationsPort;
-
-    @Inject
-    GetJustificationStatusPort getJustificationStatusPort;
 
     @Inject
     com.smms.assistance.infrastructure.client.ProjectManagerClientWrapper pmClientWrapper;
@@ -265,26 +261,6 @@ public class AssistanceQueryResolver {
         }
 
         return output;
-    }
-
-    // =========================
-    // GET JUSTIFICATION STATUS
-    // =========================
-    @Query("getJustificationStatus")
-    public JustificationStatusOutput getJustificationStatus(
-            @Name("justificationId") UUID justificationId) {
-
-        logSecurity("GetJustificationStatus");
-
-        UUID userId = authContext.getUserId();
-
-        LOG.info("📌 USER ID: " + userId);
-        LOG.info("📌 JUSTIFICATION ID: " + justificationId);
-
-        return DtoMapper.toJustificationStatusOutput(
-                getJustificationStatusPort.execute(
-                        userId,
-                        justificationId));
     }
 
     // =========================

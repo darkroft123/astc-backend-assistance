@@ -31,7 +31,6 @@ export const typeDefs = parse(/* GraphQL */ `
       fromDate: String
       toDate: String
     ): JustificationPageOutput
-    getJustificationStatus(justificationId: String): JustificationStatusOutput
     getJustificationDetailPM(id: String): JustificationOutput
     listTeamJustificationsPM(
       userIds: [String]
@@ -163,11 +162,6 @@ export const typeDefs = parse(/* GraphQL */ `
     id: String
     status: String
     submittedAt: String
-  }
-
-  type JustificationStatusOutput {
-    justificationId: String
-    status: String
   }
 
   input RegisterAttendanceInput {

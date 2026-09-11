@@ -54,7 +54,6 @@ const queryOps = [
   'listAttendance',
   'listAbsences',
   'listJustifications',
-  'getJustificationStatus',
   'getJustificationDetailPM',
   'listTeamJustificationsPM',
   'getDashboardPMInternal',
