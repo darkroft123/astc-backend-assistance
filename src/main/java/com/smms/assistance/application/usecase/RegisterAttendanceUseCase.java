@@ -89,7 +89,7 @@ public class RegisterAttendanceUseCase implements RegisterAttendancePort {
                     + ", projectId: " + input.getProjectId() 
                     + ", timestamp: " + timestamp 
                     + ", reason: Project ID is not assigned to user");
-            throw new IllegalArgumentException("El proyecto no esta asignado a este usuario.");
+            throw new IllegalArgumentException("El proyecto no est\u00e1 asignado a este usuario.");
         }
 
         // SINGLE TIME SOURCE -- Project's configured timezone
