@@ -170,20 +170,10 @@ public class AssistanceQueryResolver {
                         .find("userId = ?1 and projectId is null and date = ?2", userId, today)
                         .firstResultOptional();
             }
-            if (existing.isEmpty()) {
-                existing = attendanceRepository
-                        .find("userId = ?1 and date = ?2 order by checkIn desc", userId, today)
-                        .firstResultOptional();
-            }
         } else {
             existing = attendanceRepository
                     .find("userId = ?1 and projectId is null and date = ?2", userId, today)
                     .firstResultOptional();
-            if (existing.isEmpty()) {
-                existing = attendanceRepository
-                        .find("userId = ?1 and date = ?2 order by checkIn desc", userId, today)
-                        .firstResultOptional();
-            }
         }
 
         if (existing.isEmpty()) return null;
