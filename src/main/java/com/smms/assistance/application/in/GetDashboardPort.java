@@ -5,5 +5,5 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 public interface GetDashboardPort {
-    DashboardSummary execute(UUID userId, LocalDate fromDate, LocalDate toDate);
+    DashboardSummary execute(UUID userId, UUID projectId, LocalDate fromDate, LocalDate toDate);
 }

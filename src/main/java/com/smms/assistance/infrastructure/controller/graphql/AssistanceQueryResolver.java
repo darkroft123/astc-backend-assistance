@@ -84,7 +84,8 @@ public class AssistanceQueryResolver {
     @Query("getDashboard")
     public DashboardOutput getDashboard(
             @Name("fromDate") String fromDate,
-            @Name("toDate") String toDate) {
+            @Name("toDate") String toDate,
+            @Name("projectId") UUID projectId) {
 
         logSecurity("GetDashboard");
 
@@ -104,7 +105,7 @@ public class AssistanceQueryResolver {
 
         DashboardOutput output =
                 DtoMapper.toDashboardOutput(
-                        getDashboardPort.execute(userId, from, to));
+                        getDashboardPort.execute(userId, projectId, from, to));
 
         LOG.info("✅ DASHBOARD LOADED");
 

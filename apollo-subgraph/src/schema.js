@@ -5,7 +5,7 @@ export const typeDefs = parse(/* GraphQL */ `
     @link(url: "https://specs.apollo.dev/federation/v2.3", import: ["@key", "@shareable"])
 
   type Query {
-    getDashboard(fromDate: String, toDate: String): DashboardOutput
+    getDashboard(fromDate: String, toDate: String, projectId: String): DashboardOutput
     getTodayAttendance(projectId: String): AttendanceOutput
     listAttendance(
       page: Int!
