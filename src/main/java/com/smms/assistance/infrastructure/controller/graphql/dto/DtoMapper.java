@@ -66,6 +66,21 @@ public final class DtoMapper {
                 .build();
     }
 
+    public static JustificationOutput toJustificationOutput(JustificationEntity e, String documentUrl) {
+        return JustificationOutput.builder()
+                .id(e.getId())
+                .absenceId(e.getAbsenceId())
+                .userId(e.getUserId())
+                .description(e.getDescription())
+                .documentUrl(documentUrl)
+                .status(e.getStatus())
+                .comment(e.getComment())
+                .submittedAt(e.getSubmittedAt() != null ? utcToZone(e.getSubmittedAt(), TimezoneService.defaultTimezone()) : null)
+                .reviewedAt(e.getReviewedAt() != null ? utcToZone(e.getReviewedAt(), TimezoneService.defaultTimezone()) : null)
+                .reviewedBy(e.getReviewedBy())
+                .build();
+    }
+
     public static JustificationStatusOutput toJustificationStatusOutput(JustificationEntity e) {
         return JustificationStatusOutput.builder()
                 .justificationId(e.getId())

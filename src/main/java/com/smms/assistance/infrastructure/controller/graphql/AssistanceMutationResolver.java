@@ -20,6 +20,8 @@ import org.eclipse.microprofile.graphql.*;
 import org.jboss.logging.Logger;
 import io.smallrye.common.annotation.Blocking;
 import com.smms.assistance.infrastructure.client.AlertsClient;
+import com.smms.assistance.infrastructure.storage.S3StorageAdapter;
+import com.smms.assistance.domain.entity.JustificationEntity;
 
 
 import java.util.UUID;
@@ -68,6 +70,9 @@ public class AssistanceMutationResolver {
 
     @Inject
     CheckOutPort checkOutPort;
+
+    @Inject
+    S3StorageAdapter s3StorageAdapter;
 
     @Inject
     com.smms.assistance.infrastructure.client.ProjectManagerClientWrapper pmClientWrapper;
@@ -311,7 +316,7 @@ public RegisterAttendanceOutput registerAttendance(
 
         var result = requestObservationPMUseCase.execute(justificationId, comment, currentPmId);
 
-        return DtoMapper.toJustificationOutput(result);
+        return justificationOutput(result);
     }
 
     // ==========================================
@@ -333,7 +338,7 @@ public RegisterAttendanceOutput registerAttendance(
 
         System.out.println("[Assistance PM API] [Mutation] ApproveJustificationPM completed -> justificationId: " + justificationId + ", new status: " + result.getStatus());
 
-        return DtoMapper.toJustificationOutput(result);
+        return justificationOutput(result);
     }
 
     @Mutation("rejectJustificationPM")
@@ -351,6 +356,11 @@ public RegisterAttendanceOutput registerAttendance(
 
         System.out.println("[Assistance PM API] [Mutation] RejectJustificationPM completed -> justificationId: " + justificationId + ", new status: " + result.getStatus());
 
-        return DtoMapper.toJustificationOutput(result);
+        return justificationOutput(result);
+    }
+
+    private JustificationOutput justificationOutput(JustificationEntity result) {
+        String url = result.getDocumentUrl();
+        return DtoMapper.toJustificationOutput(result, url != null ? s3StorageAdapter.getPublicUrl(url) : null);
     }
 }
