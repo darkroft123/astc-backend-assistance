@@ -5,6 +5,7 @@ import com.smms.assistance.domain.entity.AbsenceEntity;
 import com.smms.assistance.domain.entity.JustificationEntity;
 import com.smms.assistance.infrastructure.repository.AbsenceRepository;
 import com.smms.assistance.infrastructure.repository.JustificationRepository;
+import com.smms.assistance.infrastructure.storage.S3StorageAdapter;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -15,6 +16,7 @@ public class DeleteJustificationUseCase implements DeleteJustificationPort {
 
     @Inject JustificationRepository justificationRepository;
     @Inject AbsenceRepository absenceRepository;
+    @Inject S3StorageAdapter s3StorageAdapter;
 
     @Override
     @Transactional
@@ -31,8 +33,13 @@ public class DeleteJustificationUseCase implements DeleteJustificationPort {
         }
 
         UUID absenceId = justification.getAbsenceId();
+        String docUrl = justification.getDocumentUrl();
 
         justificationRepository.delete(justification);
+
+        if (docUrl != null && !docUrl.isBlank()) {
+            s3StorageAdapter.delete(docUrl);
+        }
 
         AbsenceEntity absence = absenceRepository.findById(absenceId);
         if (absence != null) {
