@@ -37,7 +37,7 @@ public class GetDashboardUseCase implements GetDashboardPort {
         String absProjectFilter = projectId != null ? " AND a.project_id = :projectId" : "";
 
         String sql = "SELECT " +
-                "(SELECT COUNT(id) FROM attendances WHERE user_id = :userId AND status NOT IN ('OUTSIDE_SCHEDULE', 'OUTSIDE_SCHEDULE_CHECKED_OUT')" + projectFilter + " AND (CAST(:fromDate AS date) IS NULL OR date >= CAST(:fromDate AS date)) AND (CAST(:toDate AS date) IS NULL OR date <= CAST(:toDate AS date))) as att_count, " +
+"(SELECT COUNT(id) FROM attendances WHERE user_id = :userId AND status NOT IN ('OUTSIDE_SCHEDULE', 'OUTSIDE_SCHEDULE_CHECKED_OUT')" + projectFilter + " AND (CAST(:fromDate AS date) IS NULL OR date >= CAST(:fromDate AS date)) AND (CAST(:toDate AS date) IS NULL OR date <= CAST(:toDate AS date))) as att_count, " +
                 "(SELECT COUNT(id) FROM absences WHERE user_id = :userId" + projectFilter + " AND (CAST(:fromDate AS date) IS NULL OR date >= CAST(:fromDate AS date)) AND (CAST(:toDate AS date) IS NULL OR date <= CAST(:toDate AS date))) as abs_count, " +
                 "(SELECT COUNT(j.id) FROM justifications j LEFT JOIN absences a ON a.id = j.absence_id " +
                 " WHERE j.user_id = :userId AND UPPER(j.status) IN ('PENDING', 'SUBMITTED', 'PENDIENTE', 'EN_REVISION')" + absProjectFilter +
