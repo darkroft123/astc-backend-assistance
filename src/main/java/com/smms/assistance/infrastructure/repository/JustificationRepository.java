@@ -85,7 +85,7 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
         Map<String, Object> params = new HashMap<>();
 
         if (userIds != null && !userIds.isEmpty()) {
-            query.append(" and userId in :userIds");
+            query.append(" and userId in (:userIds)");
             params.put("userIds", userIds);
         } else {
             query.append(" and 1 = 0");
@@ -119,7 +119,7 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
         Map<String, Object> params = new HashMap<>();
 
         if (userIds != null && !userIds.isEmpty()) {
-            query.append(" and userId in :userIds");
+            query.append(" and userId in (:userIds)");
             params.put("userIds", userIds);
         } else {
             return 0;
