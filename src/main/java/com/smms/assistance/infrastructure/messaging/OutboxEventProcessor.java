@@ -39,6 +39,8 @@ public class OutboxEventProcessor {
         STATUS_TRANSLATIONS.put("LATE_CHECKED_OUT", "Tarde");
         STATUS_TRANSLATIONS.put("EARLY", "Fuera de horario");
         STATUS_TRANSLATIONS.put("OUTSIDE_SCHEDULE", "Fuera de horario");
+        STATUS_TRANSLATIONS.put("OUTSIDE_SCHEDULE_CHECKED_IN", "Ingreso fuera de horario");
+        STATUS_TRANSLATIONS.put("OUTSIDE_SCHEDULE_CHECKED_OUT", "Salida fuera de horario");
         STATUS_TRANSLATIONS.put("EARLY_DEPARTURE", "Salida temprana");
         STATUS_TRANSLATIONS.put("CHECKED_IN", "Registrado");
         STATUS_TRANSLATIONS.put("PRESENTE", "Presente");
@@ -49,6 +51,7 @@ public class OutboxEventProcessor {
         STATUS_TRANSLATIONS.put("OBSERVATION", "Observado");
         STATUS_TRANSLATIONS.put("APPROVED", "Aprobado");
         STATUS_TRANSLATIONS.put("REJECTED", "Rechazado");
+        STATUS_TRANSLATIONS.put("NOT_SCHEDULED", "Sin horario programado");
     }
 
     private static String translateStatus(String rawStatus) {
@@ -395,6 +398,12 @@ public class OutboxEventProcessor {
                         LOG.warnf("Could not resolve project name for %s", attendance.getProjectId());
                     }
                 }
+                if (!variables.containsKey("PROJECT_NAME") || variables.getString("PROJECT_NAME") == null) {
+                    variables.put("PROJECT_NAME", "General");
+                }
+                if (!variables.containsKey("PROJECT_ID") || variables.getString("PROJECT_ID") == null) {
+                    variables.put("PROJECT_ID", "General");
+                }
                 if (attendance.getCheckIn() != null) {
                     variables.put("CHECKIN_TIME", attendance.getCheckIn().toString());
                 }
@@ -403,6 +412,12 @@ public class OutboxEventProcessor {
                 }
                 variables.put("STATUS", translateStatus(attendance.getStatus()));
             }
+        }
+        if (!variables.containsKey("PROJECT_NAME")) {
+            variables.put("PROJECT_NAME", "General");
+        }
+        if (!variables.containsKey("PROJECT_ID")) {
+            variables.put("PROJECT_ID", "General");
         }
 
         String toName = payload.getString("userName", "");
@@ -431,11 +446,34 @@ public class OutboxEventProcessor {
             if (absence != null) {
                 if (absence.getProjectId() != null) {
                     variables.put("PROJECT_ID", absence.getProjectId().toString());
+                    try {
+                        var projects = projectManagerClient.getMyProjects();
+                        for (var p : projects) {
+                            if (absence.getProjectId().equals(p.getId())) {
+                                variables.put("PROJECT_NAME", p.getName());
+                                break;
+                            }
+                        }
+                    } catch (Exception e) {
+                        LOG.warnf("Could not resolve project name for absence %s", absence.getProjectId());
+                    }
+                }
+                if (!variables.containsKey("PROJECT_NAME") || variables.getString("PROJECT_NAME") == null) {
+                    variables.put("PROJECT_NAME", "General");
+                }
+                if (!variables.containsKey("PROJECT_ID") || variables.getString("PROJECT_ID") == null) {
+                    variables.put("PROJECT_ID", "General");
                 }
                 if (absence.getDate() != null) {
                     variables.put("ABSENCE_DATE", absence.getDate().toString());
                 }
             }
+        }
+        if (!variables.containsKey("PROJECT_NAME")) {
+            variables.put("PROJECT_NAME", "General");
+        }
+        if (!variables.containsKey("PROJECT_ID")) {
+            variables.put("PROJECT_ID", "General");
         }
 
         if (justificationId != null) {
