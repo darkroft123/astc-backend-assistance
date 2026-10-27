@@ -69,6 +69,23 @@ public class AssistanceQueryResolver {
     @Inject
     com.smms.assistance.infrastructure.storage.S3StorageAdapter s3StorageAdapter;
 
+    private String resolvePublicPhotoUrls(String rawPhotoUrl) {
+        if (rawPhotoUrl == null || rawPhotoUrl.isBlank()) return null;
+        if (rawPhotoUrl.contains(",")) {
+            String[] parts = rawPhotoUrl.split(",");
+            java.util.List<String> urls = new java.util.ArrayList<>();
+            for (String part : parts) {
+                String trimmed = part.trim();
+                if (!trimmed.isBlank()) {
+                    urls.add(s3StorageAdapter.getPublicUrl(trimmed));
+                }
+            }
+            return String.join(",", urls);
+        }
+        return s3StorageAdapter.getPublicUrl(rawPhotoUrl);
+    }
+
+
     // =========================
     // GET MY PROJECTS
     // =========================
