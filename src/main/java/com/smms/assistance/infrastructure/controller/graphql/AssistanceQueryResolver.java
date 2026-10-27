@@ -409,7 +409,7 @@ public class AssistanceQueryResolver {
                 + ", page: " + page 
                 + ", size: " + size);
 
-        java.util.List<UUID> allowedProjectIds = resolveAllowedProjectIds(null);
+        java.util.List<UUID> allowedProjectIds = (userIds != null && !userIds.isEmpty()) ? null : resolveAllowedProjectIds(null);
         if (allowedProjectIds != null && allowedProjectIds.isEmpty()) {
             return new JustificationPageOutput(java.util.List.of(), page, size, 0L);
         }

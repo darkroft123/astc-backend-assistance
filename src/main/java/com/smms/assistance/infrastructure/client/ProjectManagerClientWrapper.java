@@ -37,7 +37,7 @@ public class ProjectManagerClientWrapper {
             wrapper = myProjectsCache.get(userSubject, key -> {
                 miss.set(true);
                 return new ProjectOutputListWrapper(getMyProjectsUncached());
-            }).await().indefinitely();
+            }).await().atMost(java.time.Duration.ofSeconds(5));
         } catch (Exception e) {
             LOG.log(Level.WARNING, "[REDIS] Cache unavailable, falling back to direct call", e);
             miss.set(true);
