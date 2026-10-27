@@ -13,6 +13,7 @@ import java.util.UUID;
 @Builder
 public class JustificationHistoryOutput {
     private UUID id;
+    private UUID justificationId;
     private String previousStatus;
     private String newStatus;
     private String comment;

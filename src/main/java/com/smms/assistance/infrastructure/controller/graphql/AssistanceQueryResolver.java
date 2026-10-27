@@ -501,6 +501,7 @@ public class AssistanceQueryResolver {
         var historyOutputs = historyEntities.stream()
                 .map(h -> JustificationHistoryOutput.builder()
                         .id(h.getId())
+                        .justificationId(h.getJustificationId())
                         .previousStatus(h.getPreviousStatus())
                         .newStatus(h.getNewStatus())
                         .comment(h.getComment())
