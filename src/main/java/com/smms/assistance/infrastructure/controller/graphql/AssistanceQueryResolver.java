@@ -143,7 +143,7 @@ public class AssistanceQueryResolver {
         if (output.getItems() != null) {
             for (AttendanceOutput item : output.getItems()) {
                 if (item.getPhotoUrl() != null && !item.getPhotoUrl().isBlank()) {
-                    item.setPhotoUrl(s3StorageAdapter.getPublicUrl(item.getPhotoUrl()));
+                    item.setPhotoUrl(resolvePublicPhotoUrls(item.getPhotoUrl()));
                 }
             }
         }
@@ -181,7 +181,7 @@ public class AssistanceQueryResolver {
 
         AttendanceOutput output = DtoMapper.toAttendanceOutput(existing.get());
         if (output.getPhotoUrl() != null && !output.getPhotoUrl().isBlank()) {
-            output.setPhotoUrl(s3StorageAdapter.getPublicUrl(output.getPhotoUrl()));
+            output.setPhotoUrl(resolvePublicPhotoUrls(output.getPhotoUrl()));
         }
         return output;
     }
@@ -342,7 +342,7 @@ public class AssistanceQueryResolver {
         if (output.getItems() != null) {
             for (AttendanceOutput item : output.getItems()) {
                 if (item.getPhotoUrl() != null && !item.getPhotoUrl().isBlank()) {
-                    item.setPhotoUrl(s3StorageAdapter.getPublicUrl(item.getPhotoUrl()));
+                    item.setPhotoUrl(resolvePublicPhotoUrls(item.getPhotoUrl()));
                 }
             }
         }
