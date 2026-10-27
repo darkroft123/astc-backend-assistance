@@ -230,6 +230,9 @@ public class CheckOutUseCase implements CheckOutPort {
     }
 
     private String resolveProjectTimezone(UUID userId, UUID projectId) {
+        if (projectId == null) {
+            return TimezoneService.defaultTimezone();
+        }
         try {
             java.util.List<ProjectOutput> projects = pmClientWrapper.getMyProjects();
             if (projects != null) {

@@ -20,8 +20,8 @@ public class ProjectManagerClientWrapper {
     JsonWebToken jwt;
 
     @Inject
-    @io.quarkus.cache.CacheName("my_projects")
-    io.quarkus.cache.Cache myProjectsCache;
+    private final java.util.Map<String, CachedProjects> localProjectsCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private static record CachedProjects(List<ProjectOutput> projects, long expiresAt) {}
 
     public List<ProjectOutput> getMyProjects() {
         if (jwt == null || jwt.getSubject() == null) {
@@ -29,25 +29,26 @@ public class ProjectManagerClientWrapper {
         }
 
         String userSubject = jwt.getSubject();
-        long start = System.currentTimeMillis();
-        java.util.concurrent.atomic.AtomicBoolean miss = new java.util.concurrent.atomic.AtomicBoolean(false);
-
-        ProjectOutputListWrapper wrapper;
-        try {
-            wrapper = myProjectsCache.get(userSubject, key -> {
-                miss.set(true);
-                return new ProjectOutputListWrapper(getMyProjectsUncached());
-            }).await().atMost(java.time.Duration.ofSeconds(5));
-        } catch (Exception e) {
-            LOG.log(Level.WARNING, "[REDIS] Cache unavailable, falling back to direct call", e);
-            miss.set(true);
-            wrapper = new ProjectOutputListWrapper(getMyProjectsUncached());
+        long now = System.currentTimeMillis();
+        CachedProjects cached = localProjectsCache.get(userSubject);
+        if (cached != null && cached.expiresAt > now) {
+            return cached.projects;
         }
 
-        long elapsed = System.currentTimeMillis() - start;
-        LOG.info("[REDIS CACHE " + (miss.get() ? "MISS" : "HIT") + "] my_projects -> " + elapsed + "ms");
+        long start = System.currentTimeMillis();
+        try {
+            List<ProjectOutput> projects = getMyProjectsUncached();
+            if (projects != null) {
+                localProjectsCache.put(userSubject, new CachedProjects(projects, now + 30000));
+                long elapsed = System.currentTimeMillis() - start;
+                LOG.info("[LOCAL CACHE MISS] my_projects fetched -> " + elapsed + "ms");
+                return projects;
+            }
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, "Failed to fetch projects uncached: " + e.getMessage());
+        }
 
-        return wrapper != null ? wrapper.projects : List.of();
+        return cached != null ? cached.projects : List.of();
     }
 
     private List<ProjectOutput> getMyProjectsUncached() {
