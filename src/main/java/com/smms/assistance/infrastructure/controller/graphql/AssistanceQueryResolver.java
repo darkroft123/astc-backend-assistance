@@ -284,52 +284,14 @@ public class AssistanceQueryResolver {
     private void validatePmOwnership(UUID requestedProjectId) {
         String role = authContext.getRole();
         if ("ADMIN".equals(role)) {
-            System.out.println("🛡️ [Security] ADMIN bypass granted for projectId: " + requestedProjectId);
-            return; // Admins can access all projects
+            return;
         }
         if ("PROJECT_MANAGER".equals(role)) {
-            if (requestedProjectId == null) {
-                System.out.println("⚠️ [Security] PM accessing global view (projectId is null). Scoping to PM projects.");
-                return;
-            }
-            try {
-                java.util.List<ProjectOutput> projects = pmClientWrapper.getMyProjects();
-                if (projects == null || projects.stream().noneMatch(p -> p.id != null && p.id.equals(requestedProjectId))) {
-                    System.out.println("🚨 [Security IDOR Blocked] PM " + authContext.getUserId() + " attempted to access unauthorized projectId: " + requestedProjectId);
-                    throw new SecurityException("Access Denied: You do not own or manage this project");
-                }
-                System.out.println("✅ [Security] PM Ownership validated for project: " + requestedProjectId);
-            } catch (Exception e) {
-                LOG.error("Failed to validate PM ownership: " + e.getMessage());
-                throw new SecurityException("Access Denied: Could not verify project ownership");
-            }
+            return;
         }
     }
 
     private java.util.List<UUID> resolveAllowedProjectIds(UUID requestedProjectId) {
-        String role = authContext.getRole();
-        if ("ADMIN".equals(role)) {
-            return requestedProjectId != null ? java.util.List.of(requestedProjectId) : null;
-        }
-        if ("PROJECT_MANAGER".equals(role)) {
-            if (requestedProjectId != null) {
-                validatePmOwnership(requestedProjectId);
-                return java.util.List.of(requestedProjectId);
-            }
-            try {
-                java.util.List<ProjectOutput> projects = pmClientWrapper.getMyProjects();
-                if (projects != null && !projects.isEmpty()) {
-                    return projects.stream()
-                            .map(p -> p.id)
-                            .filter(java.util.Objects::nonNull)
-                            .collect(java.util.stream.Collectors.toList());
-                }
-                return java.util.List.of();
-            } catch (Exception e) {
-                LOG.error("Failed to resolve PM project IDs: " + e.getMessage());
-                return java.util.List.of();
-            }
-        }
         return requestedProjectId != null ? java.util.List.of(requestedProjectId) : null;
     }
 
@@ -533,14 +495,7 @@ public class AssistanceQueryResolver {
                 + ", fromDate: " + fromDate 
                 + ", toDate: " + toDate);
 
-        java.util.List<UUID> allowedProjectIds = (userIds != null && !userIds.isEmpty()) ? null : resolveAllowedProjectIds(projectId);
-        if (allowedProjectIds != null && allowedProjectIds.isEmpty()) {
-            return DashboardOutput.builder()
-                    .totalAttendances(0)
-                    .totalAbsences(0)
-                    .pendingJustifications(0)
-                    .build();
-        }
+        java.util.List<UUID> allowedProjectIds = projectId != null ? java.util.List.of(projectId) : null;
 
         LocalDate from = fromDate != null ? LocalDate.parse(fromDate) : null;
         LocalDate to = toDate != null ? LocalDate.parse(toDate) : null;
@@ -549,66 +504,75 @@ public class AssistanceQueryResolver {
         int totalAbsences = 0;
         int pendingJustifications = 0;
 
+        StringBuilder sql = new StringBuilder("SELECT ");
+
+        // 1. Attendances
+        sql.append("(SELECT COUNT(id) FROM attendances WHERE status NOT IN ('OUTSIDE_SCHEDULE', 'OUTSIDE_SCHEDULE_CHECKED_OUT')");
         if (userIds != null && !userIds.isEmpty()) {
-            StringBuilder sql = new StringBuilder("SELECT ");
-
-            // 1. Attendances
-            sql.append("(SELECT COUNT(id) FROM attendances WHERE user_id IN :userIds AND status NOT IN ('OUTSIDE_SCHEDULE', 'OUTSIDE_SCHEDULE_CHECKED_OUT')");
-            if (allowedProjectIds != null) {
-                sql.append(" AND project_id IN :allowedProjectIds");
-            }
-            if (from != null) {
-                sql.append(" AND date >= :fromDate");
-            }
-            if (to != null) {
-                sql.append(" AND date <= :toDate");
-            }
-            sql.append("), ");
-
-            // 2. Absences
-            sql.append("(SELECT COUNT(id) FROM absences WHERE user_id IN :userIds");
-            if (allowedProjectIds != null) {
-                sql.append(" AND project_id IN :allowedProjectIds");
-            }
-            if (from != null) {
-                sql.append(" AND date >= :fromDate");
-            }
-            if (to != null) {
-                sql.append(" AND date <= :toDate");
-            }
-            sql.append("), ");
-
-            // 3. Justifications
-            sql.append("(SELECT COUNT(j.id) FROM justifications j JOIN absences a ON a.id = j.absence_id WHERE j.user_id IN :userIds AND j.status IN ('SUBMITTED', 'PENDING')");
-            if (allowedProjectIds != null) {
-                sql.append(" AND a.project_id IN :allowedProjectIds");
-            }
-            if (from != null) {
-                sql.append(" AND a.date >= :fromDate");
-            }
-            if (to != null) {
-                sql.append(" AND a.date <= :toDate");
-            }
-            sql.append(")");
-
-            var nativeQuery = entityManager.createNativeQuery(sql.toString())
-                    .setParameter("userIds", userIds);
-            if (allowedProjectIds != null) {
-                nativeQuery.setParameter("allowedProjectIds", allowedProjectIds);
-            }
-            if (from != null) {
-                nativeQuery.setParameter("fromDate", from);
-            }
-            if (to != null) {
-                nativeQuery.setParameter("toDate", to);
-            }
-
-            Object[] result = (Object[]) nativeQuery.getSingleResult();
-
-            totalAttendances = ((Number) result[0]).intValue();
-            totalAbsences = ((Number) result[1]).intValue();
-            pendingJustifications = ((Number) result[2]).intValue();
+            sql.append(" AND user_id IN (:userIds)");
         }
+        if (allowedProjectIds != null) {
+            sql.append(" AND (project_id IN (:allowedProjectIds) OR project_id IS NULL)");
+        }
+        if (from != null) {
+            sql.append(" AND date >= :fromDate");
+        }
+        if (to != null) {
+            sql.append(" AND date <= :toDate");
+        }
+        sql.append("), ");
+
+        // 2. Absences
+        sql.append("(SELECT COUNT(id) FROM absences WHERE 1=1");
+        if (userIds != null && !userIds.isEmpty()) {
+            sql.append(" AND user_id IN (:userIds)");
+        }
+        if (allowedProjectIds != null) {
+            sql.append(" AND (project_id IN (:allowedProjectIds) OR project_id IS NULL)");
+        }
+        if (from != null) {
+            sql.append(" AND date >= :fromDate");
+        }
+        if (to != null) {
+            sql.append(" AND date <= :toDate");
+        }
+        sql.append("), ");
+
+        // 3. Justifications
+        sql.append("(SELECT COUNT(j.id) FROM justifications j JOIN absences a ON a.id = j.absence_id WHERE j.status IN ('SUBMITTED', 'PENDING')");
+        if (userIds != null && !userIds.isEmpty()) {
+            sql.append(" AND j.user_id IN (:userIds)");
+        }
+        if (allowedProjectIds != null) {
+            sql.append(" AND (a.project_id IN (:allowedProjectIds) OR a.project_id IS NULL)");
+        }
+        if (from != null) {
+            sql.append(" AND a.date >= :fromDate");
+        }
+        if (to != null) {
+            sql.append(" AND a.date <= :toDate");
+        }
+        sql.append(")");
+
+        var nativeQuery = entityManager.createNativeQuery(sql.toString());
+        if (userIds != null && !userIds.isEmpty()) {
+            nativeQuery.setParameter("userIds", userIds);
+        }
+        if (allowedProjectIds != null) {
+            nativeQuery.setParameter("allowedProjectIds", allowedProjectIds);
+        }
+        if (from != null) {
+            nativeQuery.setParameter("fromDate", from);
+        }
+        if (to != null) {
+            nativeQuery.setParameter("toDate", to);
+        }
+
+        Object[] result = (Object[]) nativeQuery.getSingleResult();
+
+        totalAttendances = ((Number) result[0]).intValue();
+        totalAbsences = ((Number) result[1]).intValue();
+        pendingJustifications = ((Number) result[2]).intValue();
 
         System.out.println("[Assistance PM API] [Query] GetDashboardPMInternal summary -> Attendances: " + totalAttendances 
                 + ", Absences: " + totalAbsences 
@@ -622,22 +586,6 @@ public class AssistanceQueryResolver {
     }
 
     private String resolveProjectTimezone(UUID userId, UUID projectId) {
-        if (projectId == null) {
-            return TimezoneService.defaultTimezone();
-        }
-        try {
-            java.util.List<ProjectOutput> projects = pmClientWrapper.getMyProjects();
-            if (projects != null) {
-                for (ProjectOutput p : projects) {
-                    if (p.id != null && p.id.equals(projectId) && p.getTimezone() != null
-                            && TimezoneService.isValidTimezone(p.getTimezone())) {
-                        return p.getTimezone();
-                    }
-                }
-            }
-        } catch (Exception e) {
-            System.out.println("[Query] Could not resolve project timezone, using default");
-        }
         return TimezoneService.defaultTimezone();
     }
 }
