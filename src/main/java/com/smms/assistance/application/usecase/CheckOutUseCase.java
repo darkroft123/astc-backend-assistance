@@ -112,9 +112,9 @@ public class CheckOutUseCase implements CheckOutPort {
                     String folder = "document/private/user/" + userId + "/photo";
                     String filename = entity.getId() + "_checkout.jpg";
                     String key = s3StorageAdapter.upload(folder, filename, stream, decoded.length, "image/jpeg");
-                    String existing = entity.getPhotoUrl();
-                    if (existing != null && !existing.isBlank() && !existing.contains("_checkout")) {
-                        entity.setPhotoUrl(existing + "," + key);
+                    String currentPhoto = entity.getPhotoUrl();
+                    if (currentPhoto != null && !currentPhoto.isBlank() && !currentPhoto.contains("_checkout")) {
+                        entity.setPhotoUrl(currentPhoto + "," + key);
                     } else {
                         entity.setPhotoUrl(key);
                     }
