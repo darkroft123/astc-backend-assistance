@@ -358,7 +358,7 @@ public class AssistanceQueryResolver {
                 + ", page: " + page 
                 + ", size: " + size);
 
-        java.util.List<UUID> allowedProjectIds = resolveAllowedProjectIds(projectId);
+        java.util.List<UUID> allowedProjectIds = (userIds != null && !userIds.isEmpty()) ? null : resolveAllowedProjectIds(projectId);
         if (allowedProjectIds != null && allowedProjectIds.isEmpty()) {
             return new AttendancePageOutput(java.util.List.of(), page, size, 0L);
         }
@@ -532,7 +532,7 @@ public class AssistanceQueryResolver {
                 + ", fromDate: " + fromDate 
                 + ", toDate: " + toDate);
 
-        java.util.List<UUID> allowedProjectIds = resolveAllowedProjectIds(projectId);
+        java.util.List<UUID> allowedProjectIds = (userIds != null && !userIds.isEmpty()) ? null : resolveAllowedProjectIds(projectId);
         if (allowedProjectIds != null && allowedProjectIds.isEmpty()) {
             return DashboardOutput.builder()
                     .totalAttendances(0)
