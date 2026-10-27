@@ -310,7 +310,7 @@ public class AttendanceRepository implements PanacheRepositoryBase<AttendanceEnt
             if (allowedProjectIds.isEmpty()) {
                 sql.append(" AND 1=0");
             } else {
-                sql.append(" AND a.project_id IN (:allowedProjectIds)");
+                sql.append(" AND (a.project_id IN (:allowedProjectIds) OR a.project_id IS NULL)");
                 params.put("allowedProjectIds", allowedProjectIds);
             }
         }
