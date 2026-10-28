@@ -178,19 +178,20 @@ public class AssistanceQueryResolver {
         String timezone = resolveProjectTimezone(userId, projectId);
         java.time.LocalDate today = TimezoneService.todayAtZone(timezone);
 
-        java.util.Optional<com.smms.assistance.domain.entity.AttendanceEntity> existing;
+        java.util.Optional<com.smms.assistance.domain.entity.AttendanceEntity> existing = java.util.Optional.empty();
         if (projectId != null) {
             existing = attendanceRepository
-                    .find("userId = ?1 and projectId = ?2 and date = ?3", userId, projectId, today)
+                    .find("userId = ?1 and projectId = ?2 and date = ?3 order by checkIn desc", userId, projectId, today)
                     .firstResultOptional();
             if (existing.isEmpty()) {
                 existing = attendanceRepository
-                        .find("userId = ?1 and projectId is null and date = ?2", userId, today)
+                        .find("userId = ?1 and projectId is null and date = ?2 order by checkIn desc", userId, today)
                         .firstResultOptional();
             }
-        } else {
+        }
+        if (existing.isEmpty()) {
             existing = attendanceRepository
-                    .find("userId = ?1 and projectId is null and date = ?2", userId, today)
+                    .find("userId = ?1 and date = ?2 order by checkIn desc", userId, today)
                     .firstResultOptional();
         }
 
