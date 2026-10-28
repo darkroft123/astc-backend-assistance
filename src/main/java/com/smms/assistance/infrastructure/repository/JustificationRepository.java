@@ -156,6 +156,7 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
         StringBuilder sql = new StringBuilder(
             "SELECT CAST(j.id AS VARCHAR), CAST(j.user_id AS VARCHAR), CAST(j.absence_id AS VARCHAR), " +
             "j.status, j.description, j.submitted_at, j.reviewed_at, j.created_at, j.updated_at, " +
+            "j.document_url, " +
             "COUNT(*) OVER() " +
             "FROM justifications j WHERE j.user_id = :userId"
         );
@@ -195,7 +196,7 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
 
         for (Object[] row : rows) {
             if (totalCount == 0) {
-                totalCount = ((Number) row[9]).longValue();
+                totalCount = ((Number) row[10]).longValue();
             }
             JustificationEntity entity = new JustificationEntity();
             entity.setId(row[0] != null ? java.util.UUID.fromString(row[0].toString()) : null);
@@ -209,6 +210,7 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
             entity.setReviewedAt(toLocalDateTime(row[6]));
             entity.setCreatedAt(toLocalDateTime(row[7]));
             entity.setUpdatedAt(toLocalDateTime(row[8]));
+            entity.setDocumentUrl(row[9] != null ? row[9].toString() : null);
             
             mapped.add(entity);
         }
@@ -237,6 +239,7 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
         StringBuilder sql = new StringBuilder(
             "SELECT CAST(j.id AS VARCHAR), CAST(j.user_id AS VARCHAR), CAST(j.absence_id AS VARCHAR), " +
             "j.status, j.description, j.submitted_at, j.reviewed_at, j.created_at, j.updated_at, " +
+            "j.document_url, " +
             "COUNT(*) OVER() " +
             "FROM justifications j " +
             (allowedProjectIds != null ? "JOIN absences a ON a.id = j.absence_id " : "") +
@@ -295,7 +298,7 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
 
         for (Object[] row : rows) {
             if (totalCount == 0) {
-                totalCount = ((Number) row[9]).longValue();
+                totalCount = ((Number) row[10]).longValue();
             }
             JustificationEntity entity = new JustificationEntity();
             entity.setId(row[0] != null ? java.util.UUID.fromString(row[0].toString()) : null);
@@ -309,6 +312,7 @@ public class JustificationRepository implements PanacheRepositoryBase<Justificat
             entity.setReviewedAt(toLocalDateTime(row[6]));
             entity.setCreatedAt(toLocalDateTime(row[7]));
             entity.setUpdatedAt(toLocalDateTime(row[8]));
+            entity.setDocumentUrl(row[9] != null ? row[9].toString() : null);
             
             mapped.add(entity);
         }
