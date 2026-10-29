@@ -1,0 +1,29 @@
+####
+# This Dockerfile is used in order to build a container that runs the Quarkus application in native (no JVM) mode.
+# It uses a micro base image, tuned for Quarkus native executables.
+#
+# Before building the container image run:
+#
+# ./mvnw package -Dnative
+#
+# Then, build the image with:
+#
+# docker build -f src/main/docker/Dockerfile.native-micro -t quarkus/astc-cn-backend-assistance .
+#
+# Then run the container using:
+#
+# docker run -i --rm -p 8082:8082 quarkus/astc-cn-backend-assistance
+#
+###
+FROM quay.io/quarkus/ubi9-quarkus-micro-image:2.0@sha256:2d26b888cf6d12cf44db9ff2777381838d98c50185f256f503b13e4748b9eb25
+ARG APP_UID=2000
+ARG APP_GID=3000
+USER root
+WORKDIR /work/
+RUN mkdir -p /work     && chown -R ${APP_UID}:${APP_GID} /work
+COPY --chown=${APP_UID}:${APP_GID} --chmod=0755 target/*-runner /work/application
+RUN chmod 775 /work     && chmod -R "g+rwX" /work
+USER ${APP_UID}
+EXPOSE 8082
+ENV TZ=UTC
+ENTRYPOINT ["./application", "-Dquarkus.http.host=0.0.0.0", "-Duser.timezone=UTC"]
