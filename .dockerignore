@@ -1,19 +1,17 @@
-**/.git
-**/.git/**
-**/node_modules
-**/node_modules/**
-**/.next
-**/.next/**
-**/dist
-**/dist/**
-**/target
-**/target/**
-**/.quarkus
-**/.quarkus/**
-**/.idea
-**/.idea/**
-**/.vscode
-**/.vscode/**
+# Allowlist: only what the image builds need reaches the Docker context
+*
+# sources for the Maven build inside Docker (Dockerfile at the repo root)
+!src
+!pom.xml
+!mvnw
+!.mvn
+# artifacts built on the runner (src/main/docker/Dockerfile.jvm and Dockerfile.native-micro)
+!target/*-runner
+!target/*-runner.jar
+!target/lib/*
+!target/quarkus-app/*
+# never in the image, even inside the allowed folders
+src/test
 **/*.log
-**/*.tar
-.env*
+**/.DS_Store
+**/.env*

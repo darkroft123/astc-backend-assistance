@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'pom.xml'
+      - '.github/pipeline.yml'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'pom.xml'
+      - '.github/pipeline.yml'
+      - '.github/workflows/ci.yml'
+  workflow_dispatch:
+    inputs:
+      run_sonar:
+        description: 'Sonar run (JVM verify + QA, no image)'
+        type: boolean
+        default: false
+      run_tests:
+        description: 'Run unit tests'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: joyitoficial/devops-actions/.github/workflows/pipeline.yml@main
+    with:
+      pipeline-file: .github/pipeline.yml
+      config-runs-on: '["self-hosted","Linux"]'
+      run-sonar: ${{ inputs.run_sonar == true }}
+      run-tests: ${{ inputs.run_tests == true }}
+    secrets: inherit
