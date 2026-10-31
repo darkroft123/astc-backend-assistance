@@ -1,6 +1,7 @@
 package com.smms.assistance.infrastructure.messaging;
 
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -405,7 +406,17 @@ public class OutboxEventProcessor {
                     variables.put("PROJECT_ID", "General");
                 }
                 if (attendance.getCheckIn() != null) {
-                    variables.put("CHECKIN_TIME", attendance.getCheckIn().toString());
+                    LocalTime checkIn = attendance.getCheckIn();
+                    int hour = checkIn.getHour();
+                    int minute = checkIn.getMinute();
+                    String ampm = hour >= 12 ? "p. m." : "a. m.";
+                    int h12 = hour % 12 == 0 ? 12 : hour % 12;
+                    String formattedTime = String.format("%02d:%02d %s", h12, minute, ampm);
+                    String tz = attendance.getProjectTimezone();
+                    if (tz != null && !tz.isBlank()) {
+                        formattedTime += " (" + tz + ")";
+                    }
+                    variables.put("CHECKIN_TIME", formattedTime);
                 }
                 if (attendance.getDate() != null) {
                     variables.put("ATTENDANCE_DATE", attendance.getDate().toString());
