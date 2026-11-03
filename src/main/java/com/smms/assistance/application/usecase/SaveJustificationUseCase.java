@@ -55,10 +55,13 @@ public class SaveJustificationUseCase implements SaveJustificationPort {
         });
 
         String documentUrl = input.getDocumentUrl();
+        String rawBase64 = input.getFileBase64();
+        if ((rawBase64 == null || rawBase64.isBlank()) && documentUrl != null && (documentUrl.startsWith("data:") || documentUrl.length() > 500)) {
+            rawBase64 = documentUrl;
+        }
 
-        if (input.getFileBase64() != null && !input.getFileBase64().isBlank()) {
+        if (rawBase64 != null && !rawBase64.isBlank()) {
             try {
-                String rawBase64 = input.getFileBase64();
                 String raw = rawBase64;
                 if (raw.contains(",")) {
                     raw = raw.substring(raw.indexOf(",") + 1);

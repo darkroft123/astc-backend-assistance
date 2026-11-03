@@ -56,9 +56,14 @@ public class EditJustificationUseCase implements EditJustificationPort {
             justification.setDescription(input.getDescription());
         }
 
-        if (input.getFileBase64() != null && !input.getFileBase64().isBlank()) {
+        String rawBase64 = input.getFileBase64();
+        if ((rawBase64 == null || rawBase64.isBlank()) && input.getDocumentUrl() != null && (input.getDocumentUrl().startsWith("data:") || input.getDocumentUrl().length() > 500)) {
+            rawBase64 = input.getDocumentUrl();
+        }
+
+        if (rawBase64 != null && !rawBase64.isBlank()) {
             try {
-                String raw = input.getFileBase64();
+                String raw = rawBase64;
                 if (raw.contains(",")) {
                     raw = raw.substring(raw.indexOf(",") + 1);
                 }

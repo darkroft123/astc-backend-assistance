@@ -17,10 +17,10 @@ public class SaveJustificationInput {
     @NotNull(message = "El ID de la inasistencia es obligatorio.")
     private UUID absenceId;
 
-    @Size(max = 500, message = "El motivo de la justificación no puede exceder los 500 caracteres.")
+    @Size(max = 1000, message = "El motivo de la justificación no puede exceder los 1000 caracteres.")
     private String description;
 
-    @Size(max = 2048, message = "La URL del documento no puede exceder los 2048 caracteres.")
+    @Size(max = 10485760, message = "El documento o URL excede el tamaño máximo permitido.")
     private String documentUrl;
 
     private String fileBase64;
