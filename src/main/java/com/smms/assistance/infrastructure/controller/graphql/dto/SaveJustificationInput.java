@@ -20,7 +20,7 @@ public class SaveJustificationInput {
     @Size(max = 500, message = "El motivo de la justificación no puede exceder los 500 caracteres.")
     private String description;
 
-    @Size(max = 500, message = "La URL del documento no puede exceder los 500 caracteres.")
+    @Size(max = 2048, message = "La URL del documento no puede exceder los 2048 caracteres.")
     private String documentUrl;
 
     private String fileBase64;

@@ -26,7 +26,7 @@ public class RegisterAttendanceInput {
     @DecimalMax(value = "180.0", message = "La longitud debe ser menor o igual a 180.")
     private Double longitude;
 
-    @Size(max = 500, message = "La URL de la fotografía no puede exceder los 500 caracteres.")
+    @Size(max = 10485760, message = "La fotografía excede el tamaño máximo permitido.")
     private String photoUrl;
 
     private Boolean replace;
