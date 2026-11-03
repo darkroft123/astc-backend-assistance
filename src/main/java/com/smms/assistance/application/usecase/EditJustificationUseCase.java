@@ -26,16 +26,30 @@ public class EditJustificationUseCase implements EditJustificationPort {
     @Override
     @Transactional
     public JustificationEntity execute(UUID userId, UUID justificationId, SaveJustificationInput input) {
+        if (justificationId == null) {
+            throw new IllegalArgumentException("El ID de la justificación es obligatorio.");
+        }
+
+        if (input.getDescription() != null) {
+            String desc = input.getDescription().trim();
+            if (desc.length() > 500) {
+                throw new IllegalArgumentException("El motivo de la justificación no puede exceder los 500 caracteres.");
+            }
+            if (desc.toLowerCase().contains("<script") || desc.toLowerCase().contains("javascript:")) {
+                throw new IllegalArgumentException("El motivo contiene texto o caracteres no permitidos.");
+            }
+        }
+
         JustificationEntity justification = justificationRepository.findByIdOptional(justificationId)
-                .orElseThrow(() -> new IllegalArgumentException("Justification not found: " + justificationId));
+                .orElseThrow(() -> new IllegalArgumentException("No se encontró la justificación a editar: " + justificationId));
 
         if (!justification.getUserId().equals(userId)) {
-            throw new SecurityException("Access denied: justification does not belong to authenticated user");
+            throw new SecurityException("Acceso denegado: la justificación no pertenece al usuario autenticado.");
         }
 
         String currentStatus = justification.getStatus();
         if (!"PENDING".equals(currentStatus) && !"OBSERVATION".equals(currentStatus)) {
-            throw new IllegalStateException("Cannot edit justification with status: " + currentStatus + ". Only PENDING or OBSERVATION can be edited.");
+            throw new IllegalStateException("No se puede editar una justificación con estado: " + currentStatus + ". Solo se permiten justificaciones pendientes u observadas.");
         }
 
         if (input.getDescription() != null && !input.getDescription().isBlank()) {

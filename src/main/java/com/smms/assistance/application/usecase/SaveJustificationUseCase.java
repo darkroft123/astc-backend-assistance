@@ -28,16 +28,30 @@ public class SaveJustificationUseCase implements SaveJustificationPort {
     @Override
     @Transactional
     public JustificationEntity execute(UUID userId, SaveJustificationInput input) {
+        if (input.getAbsenceId() == null) {
+            throw new IllegalArgumentException("El ID de la inasistencia es obligatorio.");
+        }
+
+        if (input.getDescription() != null) {
+            String desc = input.getDescription().trim();
+            if (desc.length() > 500) {
+                throw new IllegalArgumentException("El motivo de la justificación no puede exceder los 500 caracteres.");
+            }
+            if (desc.toLowerCase().contains("<script") || desc.toLowerCase().contains("javascript:")) {
+                throw new IllegalArgumentException("El motivo contiene texto o caracteres no permitidos.");
+            }
+        }
+
         AbsenceEntity absence = absenceRepository.findById(input.getAbsenceId());
         if (absence == null) {
-            throw new IllegalArgumentException("Absence not found: " + input.getAbsenceId());
+            throw new IllegalArgumentException("No se encontró la inasistencia indicada: " + input.getAbsenceId());
         }
         if (!absence.getUserId().equals(userId)) {
-            throw new SecurityException("Access denied: absence does not belong to authenticated user");
+            throw new SecurityException("Acceso denegado: la inasistencia no pertenece al usuario autenticado.");
         }
 
         justificationRepository.findByAbsenceId(input.getAbsenceId()).ifPresent(j -> {
-            throw new IllegalStateException("A justification already exists for absence: " + input.getAbsenceId());
+            throw new IllegalStateException("Ya existe una justificación registrada para esta inasistencia: " + input.getAbsenceId());
         });
 
         String documentUrl = input.getDocumentUrl();

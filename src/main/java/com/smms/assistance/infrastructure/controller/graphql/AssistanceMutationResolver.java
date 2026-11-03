@@ -15,6 +15,7 @@ import com.smms.assistance.infrastructure.security.AuthContext;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.validation.Valid;
 
 import org.eclipse.microprofile.graphql.*;
 import org.jboss.logging.Logger;
@@ -89,7 +90,7 @@ public class AssistanceMutationResolver {
     @Mutation("registerAttendance")
     @RolesAllowed({"TEAM_MEMBER", "PROJECT_MANAGER", "ADMIN"})
 public RegisterAttendanceOutput registerAttendance(
-        @Name("input") RegisterAttendanceInput input) {
+        @Valid @Name("input") RegisterAttendanceInput input) {
 
     logSecurity("RegisterAttendance");
 
@@ -178,7 +179,7 @@ public RegisterAttendanceOutput registerAttendance(
     // =========================
     @Mutation("saveJustification")
     public SaveJustificationOutput saveJustification(
-            @Name("input") SaveJustificationInput input) {
+            @Valid @Name("input") SaveJustificationInput input) {
 
         logSecurity("SaveJustification");
 
@@ -233,7 +234,7 @@ public RegisterAttendanceOutput registerAttendance(
     @Mutation("editJustification")
     public SaveJustificationOutput editJustification(
             @Name("id") UUID id,
-            @Name("input") SaveJustificationInput input) {
+            @Valid @Name("input") SaveJustificationInput input) {
 
         logSecurity("EditJustification");
 
