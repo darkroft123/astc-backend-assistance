@@ -16,5 +16,6 @@ RUN --mount=type=cache,target=/root/.npm \
 COPY . .
 
 EXPOSE 4010
+USER node
 
 CMD ["node", "src/index.js"]
